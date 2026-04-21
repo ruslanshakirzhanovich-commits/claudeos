@@ -1,12 +1,115 @@
 # ClaudeOS 🦞
 
+**[English](#english)** · **[Русский](#русский)**
+
+---
+
+<a id="english"></a>
+
+## English
+
+Personal AI assistant powered by Claude Code, controlled via Telegram. Your own Jarvis, running on your server.
+
+Text your bot on Telegram and it responds as a full agent: reads files, schedules tasks, remembers you, runs skills, works 24/7. All state lives on your machine, no cloud middleman.
+
+---
+
+### ⚠️ Prerequisites
+
+- **Ubuntu 22.04 or 24.04** (fresh server or VPS)
+- **Root access** to the machine (the installer runs as root)
+- **Claude Pro or Max subscription** — the bot uses your Anthropic account via `claude login`, no separate API key needed
+- **Telegram account** and a bot created via [@BotFather](https://t.me/BotFather)
+- *Optional:* **Groq API key** (free, [console.groq.com](https://console.groq.com)) — for voice-message transcription via Whisper
+
+---
+
+### 🚀 One-click install
+
+On a fresh Ubuntu machine, as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ruslanshakirzhanovich-commits/claudeos/main/install.sh | bash
+```
+
+The installer will ask you to:
+1. Run `claude login` — open the URL in your browser and authenticate with your Anthropic account
+2. Paste your **Telegram Bot Token** (get one from [@BotFather](https://t.me/BotFather) with `/newbot`)
+3. Paste your **Allowed Chat ID** (can be left empty — on first run the bot will send you your ID; put it in `.env` and restart the service)
+4. Paste a **Groq API Key** (optional, skip with Enter)
+
+After 2–3 minutes `claudeclaw.service` is up and will auto-start on reboot.
+
+---
+
+### 📋 What it does
+
+- **Telegram conversations** — text, code, commands, everything Claude Code does, from your phone
+- **Voice messages via Groq Whisper** — send a voice note, the bot transcribes and acts on it
+- **Long-term memory** — SQLite with FTS5, dual-sector (semantic + episodic), relevant facts auto-injected into prompts
+- **Task scheduler** — cron-like scheduler (`schedule-cli.js`), the bot can set its own reminders and morning summaries
+- **Skills** — everything in `~/.claude/skills/` is available: Gmail, Calendar, Obsidian, agent-browser, plus anything you plug in
+- **24/7 autostart** — `systemd` brings the service back up on reboot or crash
+
+---
+
+### 🛠 Management
+
+```bash
+systemctl status claudeclaw      # Is it alive?
+systemctl restart claudeclaw     # Restart (after editing .env)
+systemctl stop claudeclaw        # Stop
+systemctl start claudeclaw       # Start
+journalctl -u claudeclaw -f      # Tail logs live
+```
+
+Logs are also written to `/home/claw/claudeos/store/claudeclaw.log`.
+
+---
+
+### 📂 Layout
+
+```
+/home/claw/claudeos/         ← project code (cloned repo)
+  ├── src/                   ← TypeScript sources
+  ├── dist/                  ← compiled JS (after npm run build)
+  ├── scripts/               ← helper CLIs (setup, status, notify)
+  ├── store/                 ← SQLite memory + logs (gitignored)
+  │   └── claudeclaw.db      ← long-term memory
+  └── .env                   ← your tokens (chmod 600, gitignored)
+
+/home/claw/.claude/skills/   ← Claude Code skills available to the bot
+
+/etc/systemd/system/claudeclaw.service   ← autostart unit
+```
+
+---
+
+### 🙏 Credits
+
+Under the hood: [Claude Code](https://docs.claude.com/en/docs/claude-code), a product of [Anthropic](https://www.anthropic.com/). ClaudeOS is a wrapper that turns Claude Code into a personal Telegram assistant.
+
+Main libraries: [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), [`grammy`](https://grammy.dev), [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3).
+
+---
+
+### 📜 License
+
+[MIT](LICENSE) — do what you want, just don't break each other's servers.
+
+---
+
+<a id="русский"></a>
+
+## Русский
+
 Персональный AI-ассистент на базе Claude Code, управляемый через Telegram. Ваш собственный Jarvis на вашем сервере.
 
 Пишете боту в Telegram — он отвечает как полноценный агент: читает файлы, планирует задачи, помнит вас, выполняет скиллы, работает круглосуточно. Весь стейт живёт на вашей машине, никаких облачных прокладок.
 
 ---
 
-## ⚠️ Что нужно до установки
+### ⚠️ Что нужно до установки
 
 - **Ubuntu 22.04 или 24.04** (свежий сервер или VPS)
 - **Root-доступ** к машине (установщик запускается под root)
@@ -16,7 +119,7 @@
 
 ---
 
-## 🚀 Быстрая установка (один клик)
+### 🚀 Быстрая установка (один клик)
 
 На свежей Ubuntu-машине под root:
 
@@ -34,7 +137,7 @@ curl -fsSL https://raw.githubusercontent.com/ruslanshakirzhanovich-commits/claud
 
 ---
 
-## 📋 Что он делает
+### 📋 Что он делает
 
 - **Отвечает в Telegram** — текст, код, команды, всё как в обычном Claude Code, только с мобилы
 - **Голосовые через Groq Whisper** — скидываете voice note, он транскрибирует и выполняет
@@ -45,7 +148,7 @@ curl -fsSL https://raw.githubusercontent.com/ruslanshakirzhanovich-commits/claud
 
 ---
 
-## 🛠 Управление
+### 🛠 Управление
 
 ```bash
 systemctl status claudeclaw      # Проверить, жив ли
@@ -59,7 +162,7 @@ journalctl -u claudeclaw -f      # Смотреть логи в реальном
 
 ---
 
-## 📂 Структура
+### 📂 Структура
 
 ```
 /home/claw/claudeos/         ← код проекта (клон репы)
@@ -77,7 +180,7 @@ journalctl -u claudeclaw -f      # Смотреть логи в реальном
 
 ---
 
-## 🙏 Благодарности
+### 🙏 Благодарности
 
 Под капотом — [Claude Code](https://docs.claude.com/en/docs/claude-code), продукт [Anthropic](https://www.anthropic.com/). ClaudeOS — обёртка, превращающая Claude Code в персонального ассистента в Telegram.
 
@@ -85,6 +188,6 @@ journalctl -u claudeclaw -f      # Смотреть логи в реальном
 
 ---
 
-## 📜 Лицензия
+### 📜 Лицензия
 
 [MIT](LICENSE) — делайте что хотите, только не ломайте друг другу серверы.
