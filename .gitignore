@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+store/
+workspace/
+*.log
+*.pid
+.DS_Store
+.claude.json
+.claude.json.backup
+*.backup
+.vscode/
+.idea/
