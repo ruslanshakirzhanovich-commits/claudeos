@@ -79,8 +79,6 @@ journalctl -u claudeclaw -f      # Смотреть логи в реальном
 
 ## 🙏 Благодарности
 
-Вдохновлено [гайдом Dmitriymarketing](https://claudeclaw-guide.vercel.app/) — это не форк, а независимая реализация по мотивам открытого промпта из того материала.
-
 Под капотом — [Claude Code](https://docs.claude.com/en/docs/claude-code), продукт [Anthropic](https://www.anthropic.com/). ClaudeOS — обёртка, превращающая Claude Code в персонального ассистента в Telegram.
 
 Основные библиотеки: [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk), [`grammy`](https://grammy.dev), [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3).
