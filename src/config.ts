@@ -57,6 +57,14 @@ export const PREVIEW_HOST = (env['PREVIEW_HOST'] ?? '').trim()
 export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'
 export const WHATSAPP_PROVIDER = (env['WHATSAPP_PROVIDER'] ?? 'baileys').trim()
 
+export const WHATSAPP_META_ACCESS_TOKEN = env['WHATSAPP_META_ACCESS_TOKEN'] ?? ''
+export const WHATSAPP_META_PHONE_NUMBER_ID = env['WHATSAPP_META_PHONE_NUMBER_ID'] ?? ''
+export const WHATSAPP_META_VERIFY_TOKEN = env['WHATSAPP_META_VERIFY_TOKEN'] ?? ''
+export const WHATSAPP_META_APP_SECRET = env['WHATSAPP_META_APP_SECRET'] ?? ''
+export const WHATSAPP_META_WEBHOOK_PORT = Number(env['WHATSAPP_META_WEBHOOK_PORT'] ?? '3001') || 3001
+export const WHATSAPP_META_WEBHOOK_PATH = (env['WHATSAPP_META_WEBHOOK_PATH'] ?? '/whatsapp/webhook').trim()
+export const WHATSAPP_META_GRAPH_VERSION = (env['WHATSAPP_META_GRAPH_VERSION'] ?? 'v20.0').trim()
+
 const rawWhatsapp = env['ALLOWED_WHATSAPP_NUMBERS'] ?? ''
 export const ALLOWED_WHATSAPP_NUMBERS: readonly string[] = rawWhatsapp
   .split(',')

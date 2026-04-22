@@ -1,6 +1,7 @@
 import { WHATSAPP_ENABLED, WHATSAPP_PROVIDER } from '../config.js'
 import { logger } from '../logger.js'
 import { createBaileysClient } from './baileys.js'
+import { createMetaClient } from './meta.js'
 import { handleWhatsAppMessage } from './handler.js'
 import type { WhatsAppClient } from './types.js'
 
@@ -18,7 +19,8 @@ export async function initWhatsApp(): Promise<WhatsAppClient | null> {
       client = createBaileysClient()
       break
     case 'meta':
-      throw new Error('Meta Cloud API provider not implemented yet — use WHATSAPP_PROVIDER=baileys')
+      client = createMetaClient()
+      break
     default:
       throw new Error(`Unknown WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER}`)
   }
