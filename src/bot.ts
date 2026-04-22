@@ -107,6 +107,32 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
   }
 }
 
+interface ChangelogEntry {
+  version: string
+  date: string
+  bullets: string[]
+}
+
+export function parseChangelog(content: string, limit = 2): ChangelogEntry[] {
+  const entries: ChangelogEntry[] = []
+  let current: ChangelogEntry | null = null
+
+  for (const line of content.split('\n')) {
+    const header = line.match(/^##\s+\[([^\]]+)\]\s*-\s*(.+?)\s*$/)
+    if (header) {
+      if (current) entries.push(current)
+      if (entries.length >= limit) return entries
+      current = { version: header[1], date: header[2], bullets: [] }
+      continue
+    }
+    if (current && line.startsWith('- ')) {
+      current.bullets.push(line.slice(2).replace(/`/g, '').trim())
+    }
+  }
+  if (current && entries.length < limit) entries.push(current)
+  return entries
+}
+
 function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined; username: string | undefined } {
   return {
     chatId: String(ctx.chat?.id ?? ''),
@@ -190,6 +216,30 @@ export function createBot(): Bot {
     if (!isAuthorised(chatId)) return
     const total = countMemories(chatId)
     await ctx.reply(`Stored memories for this chat: ${total}`)
+  })
+
+  bot.command('version', async (ctx) => {
+    try {
+      const content = fs.readFileSync(
+        path.join(process.cwd(), 'CHANGELOG.md'),
+        'utf8',
+      )
+      const entries = parseChangelog(content, 2)
+      if (entries.length === 0) {
+        await ctx.reply('CHANGELOG unavailable')
+        return
+      }
+      const blocks = entries
+        .map(
+          (e) =>
+            `v${e.version} - ${e.date}\n${e.bullets.map((b) => `- ${b}`).join('\n')}`,
+        )
+        .join('\n\n')
+      await ctx.reply(`ClaudeClaw v${entries[0].version}\n\n${blocks}`)
+    } catch (err) {
+      logger.error({ err }, 'failed to read CHANGELOG')
+      await ctx.reply('CHANGELOG unavailable')
+    }
   })
 
   bot.on('message:text', async (ctx) => {
