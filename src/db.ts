@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { DB_PATH, STORE_DIR } from './config.js'
+import { runMigrations, getCurrentSchemaVersion } from './migrations.js'
 
 const BetterSqlite3 = (Database as any).default ?? Database
 
@@ -18,75 +19,11 @@ export function getDb(): InstanceType<typeof Database> {
 
 export function initDatabase(): void {
   const db = getDb()
+  runMigrations(db)
+}
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      chat_id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS memories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      chat_id TEXT NOT NULL,
-      topic_key TEXT,
-      content TEXT NOT NULL,
-      sector TEXT NOT NULL CHECK(sector IN ('semantic','episodic')),
-      salience REAL NOT NULL DEFAULT 1.0,
-      created_at INTEGER NOT NULL,
-      accessed_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_memories_chat_accessed
-      ON memories(chat_id, accessed_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_memories_salience
-      ON memories(salience);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-      content,
-      content='memories',
-      content_rowid='id',
-      tokenize='porter unicode61'
-    );
-
-    CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-      INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-      INSERT INTO memories_fts(memories_fts, rowid, content) VALUES ('delete', old.id, old.content);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE OF content ON memories BEGIN
-      INSERT INTO memories_fts(memories_fts, rowid, content) VALUES ('delete', old.id, old.content);
-      INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content);
-    END;
-
-    CREATE TABLE IF NOT EXISTS scheduled_tasks (
-      id TEXT PRIMARY KEY,
-      chat_id TEXT NOT NULL,
-      prompt TEXT NOT NULL,
-      schedule TEXT NOT NULL,
-      next_run INTEGER NOT NULL,
-      last_run INTEGER,
-      last_result TEXT,
-      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused')),
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_due
-      ON scheduled_tasks(status, next_run);
-
-    CREATE TABLE IF NOT EXISTS chat_preferences (
-      chat_id TEXT PRIMARY KEY,
-      tts_enabled INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS allowed_chats (
-      chat_id TEXT PRIMARY KEY,
-      added_at INTEGER NOT NULL,
-      added_by TEXT,
-      note TEXT
-    );
-  `)
+export function getSchemaVersion(): number {
+  return getCurrentSchemaVersion(getDb())
 }
 
 export interface AllowedChatRow {
@@ -94,6 +31,13 @@ export interface AllowedChatRow {
   added_at: number
   added_by: string | null
   note: string | null
+  last_seen_at: number | null
+}
+
+export function touchAllowedChat(chatId: string): void {
+  getDb()
+    .prepare('UPDATE allowed_chats SET last_seen_at = ? WHERE chat_id = ?')
+    .run(Date.now(), chatId)
 }
 
 export function listAllowedChats(): AllowedChatRow[] {

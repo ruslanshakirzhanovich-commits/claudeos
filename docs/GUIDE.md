@@ -278,6 +278,16 @@ Memory is isolated per chat_id — your conversations and theirs don't mix.
 
 **Caveat:** skills that use your OAuth credentials (Gmail, Calendar etc.) will run against *your* accounts from their chats. If that's not desired, disable or scope those skills.
 
+### 6b. Schema migrations
+
+The SQLite schema evolves over time. Migrations live in [`src/migrations.ts`](../src/migrations.ts) as an array; each has a `version` number and an `up(db)` function. On every startup `initDatabase()` reads `PRAGMA user_version` and applies any migrations whose version is higher — inside a transaction, so partial failures roll back.
+
+**Adding a new migration:** append to the `MIGRATIONS` array with `version: <last> + 1`. Keep the change idempotent if possible (e.g. `ALTER TABLE ... ADD COLUMN` inside a `PRAGMA table_info` check) so a re-run on an already-migrated DB is safe.
+
+**Seeing the current version:** `/stats` in Telegram reports it, or check the log line `migration applied` on startup.
+
+**Rolling back:** not supported — rolling forward is cheaper than maintaining down migrations. If a migration breaks prod, restore from `/backup` and fix forward.
+
 ### 7. Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -571,6 +581,16 @@ sudo tail -15 /home/claw/claudeclaw/store/claudeclaw.log
 Память изолирована по chat_id — твои разговоры и его не смешиваются.
 
 **Оговорка:** скиллы, использующие твою OAuth-авторизацию (Gmail, Calendar и т.д.), из его чатов будут работать от **твоего** аккаунта. Если это нежелательно — отключи или ограничь такие скиллы.
+
+### 6b. Миграции схемы БД
+
+SQLite-схема эволюционирует со временем. Миграции живут в [`src/migrations.ts`](../src/migrations.ts) как массив; у каждой есть `version` и функция `up(db)`. При каждом старте `initDatabase()` читает `PRAGMA user_version` и применяет только те миграции, у которых версия выше — внутри транзакции, частичный сбой откатывается.
+
+**Добавить новую миграцию:** допиши в массив `MIGRATIONS` с `version: <последняя> + 1`. Делай идемпотентно если возможно (например `ALTER TABLE ... ADD COLUMN` после `PRAGMA table_info` проверки) — чтобы повторный запуск на уже мигрированной БД был безопасным.
+
+**Текущая версия:** `/stats` в Telegram показывает, либо смотри лог-строку `migration applied` при старте.
+
+**Откат:** не поддерживается — проще катить вперёд, чем тащить down-миграции. Если миграция сломала прод — восстанови из `/backup` и фикси миграцию вперёд.
 
 ### 7. Траблшутинг
 

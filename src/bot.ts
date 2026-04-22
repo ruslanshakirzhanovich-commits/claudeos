@@ -23,6 +23,8 @@ import {
   countAllowedChats,
   backupDatabase,
   getBotStats,
+  touchAllowedChat,
+  getSchemaVersion,
 } from './db.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
@@ -173,6 +175,7 @@ async function handleMessage(
     return
   }
 
+  touchAllowedChat(chatId)
   log.info({ preview: rawText.slice(0, 80) }, 'message received')
 
   let typingInterval: NodeJS.Timeout | null = null
@@ -272,11 +275,12 @@ export function createBot(): Bot {
       return
     }
     const lines = rows.map((r) => {
-      const when = new Date(r.added_at).toISOString().slice(0, 10)
+      const added = new Date(r.added_at).toISOString().slice(0, 10)
+      const seen = r.last_seen_at ? new Date(r.last_seen_at).toISOString().slice(0, 10) : 'never'
       const by = r.added_by ? ` by ${r.added_by}` : ''
       const note = r.note ? ` — ${r.note}` : ''
       const adminBadge = isAdmin(r.chat_id) ? ' [admin]' : ''
-      return `• <code>${r.chat_id}</code>${adminBadge} (${when}${by})${note}`
+      return `• <code>${r.chat_id}</code>${adminBadge} (added ${added}${by}, seen ${seen})${note}`
     })
     await ctx.reply(`<b>Authorised chats (${rows.length})</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' })
   })
@@ -360,6 +364,7 @@ export function createBot(): Bot {
       `  uptime: ${uptimeStr}`,
       `  memory (RSS / heap): ${rssMb}MB / ${heapMb}MB`,
       `  node: ${process.versions.node}`,
+      `  schema version: ${getSchemaVersion()}`,
     ].join('\n')
 
     await ctx.reply(body, { parse_mode: 'HTML' })
