@@ -132,9 +132,19 @@ PREVIEW_PORT=8080
 ```
 Open the port in your firewall (`sudo ufw allow 8080/tcp` if you use ufw). Restart the bot.
 
-**Architecture:** built-in Node HTTP server (no new deps) serves `workspace/previews/`. Two skills drive the generation:
-- [`.claude/skills/frontend-design/SKILL.md`](../.claude/skills/frontend-design/SKILL.md) — vendored from Anthropic's `claude-plugins-official` marketplace (Apache 2.0). Gives Claude design-thinking instructions (pick an aesthetic, avoid AI slop). Bundled with ClaudeOS so every install has it — no separate `claude plugin install` needed.
-- [`.claude/skills/frontend-preview.md`](../.claude/skills/frontend-preview.md) — our skill that drives the save-and-serve flow.
+**Architecture:** built-in Node HTTP server (no new deps) serves `workspace/previews/`. One skill drives the generation:
+- [`.claude/skills/frontend-preview.md`](../.claude/skills/frontend-preview.md) — our skill that picks an aesthetic, generates a self-contained `index.html`, saves to the previews dir, and replies with the live URL.
+
+**Optional — better design quality:** install Anthropic's `frontend-design` plugin under the user that runs the bot. It adds design-thinking guidance (bold aesthetic directions, rejection of "AI slop" patterns) that Claude picks up alongside our skill:
+```bash
+# dev (as root)
+claude plugin install frontend-design@claude-plugins-official
+
+# prod (as claw)
+sudo -u claw bash -lc 'claude plugin install frontend-design@claude-plugins-official'
+sudo systemctl restart claudeclaw
+```
+Without it the preview still works — designs are just more likely to trend toward generic defaults.
 
 **Security:** the server is public (0.0.0.0:PORT). Anyone with the URL can see everything in `workspace/previews/`. Don't put secrets there. For private previews you'd need Tailscale (not built in yet).
 
@@ -397,9 +407,19 @@ PREVIEW_PORT=8080
 ```
 Открой порт в firewall'е (`sudo ufw allow 8080/tcp` если используется ufw). Рестарт бота.
 
-**Архитектура:** встроенный Node HTTP-сервер (0 новых deps) отдаёт `workspace/previews/`. Два скилла управляют генерацией:
-- [`.claude/skills/frontend-design/SKILL.md`](../.claude/skills/frontend-design/SKILL.md) — вендорнут из Anthropic'овского `claude-plugins-official` marketplace (Apache 2.0). Даёт Claude design-thinking инструкции (выбрать эстетику, избегать AI slop). Поставляется в комплекте с ClaudeOS — отдельно ставить `claude plugin install` не нужно.
-- [`.claude/skills/frontend-preview.md`](../.claude/skills/frontend-preview.md) — наш скилл, который сохраняет и отдаёт URL.
+**Архитектура:** встроенный Node HTTP-сервер (0 новых deps) отдаёт `workspace/previews/`. Один скилл управляет генерацией:
+- [`.claude/skills/frontend-preview.md`](../.claude/skills/frontend-preview.md) — наш скилл, который выбирает эстетику, генерит self-contained `index.html`, сохраняет в preview-папку и возвращает живой URL.
+
+**Опционально — для качества дизайна получше:** поставить Anthropic'овский плагин `frontend-design` под юзером, от имени которого работает бот. Он добавляет инструкции по design-thinking (bold aesthetic directions, избегание «AI slop»), Claude подхватит его рядом с нашим скиллом:
+```bash
+# dev (под root)
+claude plugin install frontend-design@claude-plugins-official
+
+# prod (под claw)
+sudo -u claw bash -lc 'claude plugin install frontend-design@claude-plugins-official'
+sudo systemctl restart claudeclaw
+```
+Без него preview тоже работает — просто дизайн будет ближе к дефолтам.
 
 **Безопасность:** сервер публичный (0.0.0.0:PORT). Любой с URL видит всё в `workspace/previews/`. Секреты туда класть не надо. Для приватных preview'ев понадобится Tailscale (пока не встроен).
 

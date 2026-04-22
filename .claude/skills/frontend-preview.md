@@ -9,7 +9,7 @@ When the user asks to build something visual (landing, card, dashboard mock, com
 
 - `PREVIEW_ENABLED=1` and `PREVIEW_HOST=<ip-or-domain>` should be set in `.env`. `PREVIEW_PORT` defaults to 8080.
 - If `PREVIEW_HOST` is not set, fall back to just reporting the local path — tell the user their `PREVIEW_HOST` is missing.
-- This project ships the `frontend-design` skill (vendored from the Anthropic marketplace) — ClaudeOS bundles it so every install has it. Follow its guidance for aesthetic direction: pick a bold conceptual direction (brutalist, editorial, organic, etc.), avoid generic "AI slop" (overused fonts like Inter/Roboto, cliched purple gradients on white, predictable layouts).
+- If the `frontend-design` plugin is installed (via `claude plugin install frontend-design@claude-plugins-official`), use it for design thinking — it adds guidance on aesthetic direction and avoiding generic "AI slop". If not installed, still produce polished, opinionated design: pick a clear aesthetic (brutalist, editorial, organic, refined minimal, etc.), avoid overused fonts like Inter/Roboto, avoid cliched purple-gradient-on-white.
 
 ## Flow
 
