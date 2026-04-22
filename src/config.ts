@@ -37,9 +37,17 @@ export const ALLOWED_CHAT_IDS: readonly string[] = rawAllowed
   .map((s) => s.trim())
   .filter(Boolean)
 
-export function isAuthorised(chatId: number | string): boolean {
-  if (ALLOWED_CHAT_IDS.length === 0) return true
-  return ALLOWED_CHAT_IDS.includes(String(chatId))
+const rawAdmin = env['ADMIN_CHAT_IDS'] ?? ''
+export const ADMIN_CHAT_IDS: readonly string[] = (rawAdmin
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean).length
+  ? rawAdmin.split(',').map((s) => s.trim()).filter(Boolean)
+  : ALLOWED_CHAT_IDS.slice(0, 1))
+
+export function isAdmin(chatId: number | string): boolean {
+  if (ADMIN_CHAT_IDS.length === 0) return false
+  return ADMIN_CHAT_IDS.includes(String(chatId))
 }
 
 export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'

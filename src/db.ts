@@ -79,7 +79,69 @@ export function initDatabase(): void {
       chat_id TEXT PRIMARY KEY,
       tts_enabled INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS allowed_chats (
+      chat_id TEXT PRIMARY KEY,
+      added_at INTEGER NOT NULL,
+      added_by TEXT,
+      note TEXT
+    );
   `)
+}
+
+export interface AllowedChatRow {
+  chat_id: string
+  added_at: number
+  added_by: string | null
+  note: string | null
+}
+
+export function listAllowedChats(): AllowedChatRow[] {
+  return getDb()
+    .prepare('SELECT * FROM allowed_chats ORDER BY added_at ASC')
+    .all() as AllowedChatRow[]
+}
+
+export function isChatAllowed(chatId: string): boolean {
+  const row = getDb()
+    .prepare('SELECT 1 AS ok FROM allowed_chats WHERE chat_id = ?')
+    .get(chatId) as { ok: number } | undefined
+  return Boolean(row)
+}
+
+export function countAllowedChats(): number {
+  const row = getDb().prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }
+  return row.c
+}
+
+export function addAllowedChat(chatId: string, addedBy: string | null, note: string | null): boolean {
+  const info = getDb()
+    .prepare(
+      `INSERT INTO allowed_chats (chat_id, added_at, added_by, note)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(chat_id) DO NOTHING`,
+    )
+    .run(chatId, Date.now(), addedBy, note)
+  return info.changes > 0
+}
+
+export function removeAllowedChat(chatId: string): boolean {
+  const info = getDb().prepare('DELETE FROM allowed_chats WHERE chat_id = ?').run(chatId)
+  return info.changes > 0
+}
+
+export function seedAllowedChatsFromEnv(chatIds: readonly string[]): number {
+  if (countAllowedChats() > 0) return 0
+  let seeded = 0
+  for (const id of chatIds) {
+    if (addAllowedChat(id, 'env', 'seeded from ALLOWED_CHAT_IDS')) seeded++
+  }
+  return seeded
+}
+
+export function isAuthorised(chatId: number | string): boolean {
+  if (countAllowedChats() === 0) return true
+  return isChatAllowed(String(chatId))
 }
 
 export function getTtsEnabled(chatId: string): boolean {

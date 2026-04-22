@@ -45,6 +45,9 @@ Runtime model: bot process stays up 24/7 via systemd (`claudeclaw.service`). Eac
 | `/memory` | Shows how many long-term memories are stored for this chat | yes |
 | `/voice on` | Enables voice replies (TTS) for this chat. Requires `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `.env` | yes |
 | `/voice off` | Disables voice replies | yes |
+| `/listusers` | Shows all authorised chats with date added and note | admin only |
+| `/adduser <chat_id> [note]` | Whitelists a new chat immediately, no restart needed | admin only |
+| `/removeuser <chat_id>` | Removes a chat from whitelist | admin only |
 
 All other messages are treated as prompts: plain text goes straight to Claude, voice notes are transcribed first via Groq Whisper, photos/documents are downloaded and passed to Claude with a local path hint.
 
@@ -194,17 +197,22 @@ Downtime: ~1-3 min depending on what `npm install` needs to do.
 
 ### 6. Adding a new user
 
-1. New user DMs `@iifam_bot` and sends `/chatid`. They get `Chat ID: 123456789`.
-2. On prod, add that ID to `ALLOWED_CHAT_IDS`:
-   ```bash
-   sudo -u claw sed -i -E 's|^ALLOWED_CHAT_IDS?=.*|ALLOWED_CHAT_IDS=110440505,123456789|' /home/claw/claudeclaw/.env
-   ```
-3. Restart:
-   ```bash
-   sudo systemctl restart claudeclaw
-   ```
+Two paths:
 
-After restart, the new user can message the bot. Their memory is isolated — your conversations and theirs don't mix.
+**Runtime (preferred):** as admin, send the bot:
+```
+/adduser 123456789 Alice from work
+```
+Done — no restart, no SSH. `/listusers` shows the current whitelist. `/removeuser 123456789` takes them out.
+
+**Static seed (bootstrap only):** `ALLOWED_CHAT_IDS` in `.env` is used to seed the DB on first startup. After the first boot the DB is the source of truth; editing `.env` has no effect unless you wipe `store/claudeclaw.db`. Use this only for fresh installs.
+
+Flow for inviting someone new:
+1. They DM `@iifam_bot` and send `/chatid`. Gets `Chat ID: 123456789`.
+2. Admin sends `/adduser 123456789 name` in their own chat with the bot.
+3. New user can now message the bot.
+
+Memory is isolated per chat_id — your conversations and theirs don't mix.
 
 **Caveat:** skills that use your OAuth credentials (Gmail, Calendar etc.) will run against *your* accounts from their chats. If that's not desired, disable or scope those skills.
 
@@ -269,6 +277,9 @@ WhatsApp  ─┘                       │
 | `/memory` | Сколько долгосрочных воспоминаний для этого чата | да |
 | `/voice on` | Включает голосовые ответы (TTS). Требует `ELEVENLABS_API_KEY` и `ELEVENLABS_VOICE_ID` в `.env` | да |
 | `/voice off` | Отключает голосовые ответы | да |
+| `/listusers` | Список авторизованных чатов с датой добавления и note | только admin |
+| `/adduser <chat_id> [note]` | Добавляет чат в whitelist мгновенно, без рестарта | только admin |
+| `/removeuser <chat_id>` | Удаляет чат из whitelist | только admin |
 
 Любое другое сообщение — промпт для Claude: текст идёт напрямую, голосовое сначала транскрибируется через Groq Whisper, фото/документы скачиваются и передаются с путём локального файла.
 
@@ -418,17 +429,22 @@ sudo tail -15 /home/claw/claudeclaw/store/claudeclaw.log
 
 ### 6. Добавление нового юзера
 
-1. Новый юзер пишет `@iifam_bot` и отправляет `/chatid`. Получает `Chat ID: 123456789`.
-2. На проде добавь этот ID в `ALLOWED_CHAT_IDS`:
-   ```bash
-   sudo -u claw sed -i -E 's|^ALLOWED_CHAT_IDS?=.*|ALLOWED_CHAT_IDS=110440505,123456789|' /home/claw/claudeclaw/.env
-   ```
-3. Рестарт:
-   ```bash
-   sudo systemctl restart claudeclaw
-   ```
+Два пути:
 
-После рестарта новый юзер сможет писать боту. Его память изолирована — твои разговоры и его не смешиваются.
+**Runtime (предпочтительный):** отправь боту от имени admin:
+```
+/adduser 123456789 Alice from work
+```
+Готово — без рестарта, без SSH. `/listusers` покажет текущий whitelist. `/removeuser 123456789` убирает.
+
+**Статический seed (только для bootstrap'а):** `ALLOWED_CHAT_IDS` в `.env` используется для seed'а БД при первом старте. После первого бута БД — источник правды; редактирование `.env` эффекта не даёт пока не снести `store/claudeclaw.db`. Используй только при свежей установке.
+
+Флоу приглашения нового юзера:
+1. Он/она пишет `@iifam_bot` и отправляет `/chatid`. Получает `Chat ID: 123456789`.
+2. Admin отправляет `/adduser 123456789 имя` в своём чате с ботом.
+3. Новый юзер может писать боту.
+
+Память изолирована по chat_id — твои разговоры и его не смешиваются.
 
 **Оговорка:** скиллы, использующие твою OAuth-авторизацию (Gmail, Calendar и т.д.), из его чатов будут работать от **твоего** аккаунта. Если это нежелательно — отключи или ограничь такие скиллы.
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS } from './config.js'
-import { initDatabase } from './db.js'
+import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS } from './config.js'
+import { initDatabase, seedAllowedChatsFromEnv } from './db.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
 import { runDecaySweep } from './memory.js'
@@ -83,6 +83,8 @@ async function main(): Promise<void> {
 
   acquireLock()
   initDatabase()
+  const seeded = seedAllowedChatsFromEnv(ALLOWED_CHAT_IDS)
+  if (seeded > 0) logger.info({ seeded }, 'seeded allowed_chats from ALLOWED_CHAT_IDS env')
 
   runDecaySweep()
   const decayTimer = setInterval(runDecaySweep, DECAY_INTERVAL_MS)

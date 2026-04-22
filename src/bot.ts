@@ -3,10 +3,9 @@ import path from 'node:path'
 import { Bot, type Context, GrammyError, HttpError, InputFile } from 'grammy'
 import {
   TELEGRAM_BOT_TOKEN,
-  ALLOWED_CHAT_IDS,
   MAX_MESSAGE_LENGTH,
   TYPING_REFRESH_MS,
-  isAuthorised,
+  isAdmin,
 } from './config.js'
 import { runAgent } from './agent.js'
 import {
@@ -16,6 +15,11 @@ import {
   countMemories,
   getTtsEnabled,
   setTtsEnabled,
+  isAuthorised,
+  listAllowedChats,
+  addAllowedChat,
+  removeAllowedChat,
+  countAllowedChats,
 } from './db.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
@@ -227,9 +231,10 @@ export function createBot(): Bot {
 
   bot.command('start', async (ctx) => {
     const chatId = String(ctx.chat?.id ?? '')
-    const authLine = ALLOWED_CHAT_IDS.length
-      ? `Auth configured (${ALLOWED_CHAT_IDS.length} chat${ALLOWED_CHAT_IDS.length === 1 ? '' : 's'} allowed).`
-      : 'No ALLOWED_CHAT_IDS set yet — add this chat ID to your .env.'
+    const n = countAllowedChats()
+    const authLine = n > 0
+      ? `Auth configured (${n} chat${n === 1 ? '' : 's'} allowed).`
+      : 'No authorised chats — message this chat ID to the admin to get whitelisted.'
     await ctx.reply(`ClaudeClaw online. Chat ID: ${chatId}\n\n${authLine}`)
   })
 
@@ -249,6 +254,63 @@ export function createBot(): Bot {
     if (!isAuthorised(chatId)) return
     const total = countMemories(chatId)
     await ctx.reply(`Stored memories for this chat: ${total}`)
+  })
+
+  bot.command('listusers', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAdmin(chatId)) {
+      await ctx.reply('Admin only.')
+      return
+    }
+    const rows = listAllowedChats()
+    if (!rows.length) {
+      await ctx.reply('No authorised chats yet (open mode).')
+      return
+    }
+    const lines = rows.map((r) => {
+      const when = new Date(r.added_at).toISOString().slice(0, 10)
+      const by = r.added_by ? ` by ${r.added_by}` : ''
+      const note = r.note ? ` — ${r.note}` : ''
+      const adminBadge = isAdmin(r.chat_id) ? ' [admin]' : ''
+      return `• <code>${r.chat_id}</code>${adminBadge} (${when}${by})${note}`
+    })
+    await ctx.reply(`<b>Authorised chats (${rows.length})</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' })
+  })
+
+  bot.command('adduser', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAdmin(chatId)) {
+      await ctx.reply('Admin only.')
+      return
+    }
+    const parts = (ctx.message?.text ?? '').split(/\s+/)
+    const targetId = parts[1]?.trim()
+    const note = parts.slice(2).join(' ').trim() || null
+    if (!targetId || !/^-?\d+$/.test(targetId)) {
+      await ctx.reply('Usage: /adduser &lt;chat_id&gt; [note]', { parse_mode: 'HTML' })
+      return
+    }
+    const added = addAllowedChat(targetId, chatId, note)
+    await ctx.reply(added ? `Added ${targetId}.` : `${targetId} was already authorised.`)
+  })
+
+  bot.command('removeuser', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAdmin(chatId)) {
+      await ctx.reply('Admin only.')
+      return
+    }
+    const targetId = (ctx.message?.text ?? '').split(/\s+/)[1]?.trim()
+    if (!targetId || !/^-?\d+$/.test(targetId)) {
+      await ctx.reply('Usage: /removeuser &lt;chat_id&gt;', { parse_mode: 'HTML' })
+      return
+    }
+    if (isAdmin(targetId)) {
+      await ctx.reply('Cannot remove an admin. Edit ADMIN_CHAT_IDS in .env first.')
+      return
+    }
+    const removed = removeAllowedChat(targetId)
+    await ctx.reply(removed ? `Removed ${targetId}.` : `${targetId} was not in the list.`)
   })
 
   bot.command('voice', async (ctx) => {
