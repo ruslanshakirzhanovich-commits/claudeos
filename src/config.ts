@@ -21,10 +21,15 @@ export const DECAY_INTERVAL_MS = 24 * 60 * 60 * 1000
 const env = readEnvFile()
 
 export const TELEGRAM_BOT_TOKEN = env['TELEGRAM_BOT_TOKEN'] ?? ''
-export const ALLOWED_CHAT_ID = env['ALLOWED_CHAT_ID'] ?? ''
 export const GROQ_API_KEY = env['GROQ_API_KEY'] ?? ''
 
+const rawAllowed = env['ALLOWED_CHAT_IDS'] ?? env['ALLOWED_CHAT_ID'] ?? ''
+export const ALLOWED_CHAT_IDS: readonly string[] = rawAllowed
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export function isAuthorised(chatId: number | string): boolean {
-  if (!ALLOWED_CHAT_ID) return true
-  return String(chatId) === ALLOWED_CHAT_ID
+  if (ALLOWED_CHAT_IDS.length === 0) return true
+  return ALLOWED_CHAT_IDS.includes(String(chatId))
 }

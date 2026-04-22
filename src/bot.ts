@@ -3,7 +3,7 @@ import path from 'node:path'
 import { Bot, type Context, GrammyError, HttpError } from 'grammy'
 import {
   TELEGRAM_BOT_TOKEN,
-  ALLOWED_CHAT_ID,
+  ALLOWED_CHAT_IDS,
   MAX_MESSAGE_LENGTH,
   TYPING_REFRESH_MS,
   isAuthorised,
@@ -107,13 +107,25 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
   }
 }
 
+function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined; username: string | undefined } {
+  return {
+    chatId: String(ctx.chat?.id ?? ''),
+    userId: ctx.from?.id,
+    username: ctx.from?.username ?? ctx.from?.first_name,
+  }
+}
+
 async function handleMessage(ctx: Context, rawText: string): Promise<void> {
-  const chatId = String(ctx.chat?.id ?? '')
+  const { chatId, userId, username } = ctxIdentity(ctx)
   if (!chatId) return
+  const log = logger.child({ chatId, userId, username })
+
   if (!isAuthorised(chatId)) {
-    logger.warn({ chatId }, 'unauthorised chat')
+    log.warn('unauthorised chat')
     return
   }
+
+  log.info({ preview: rawText.slice(0, 80) }, 'message received')
 
   let typingInterval: NodeJS.Timeout | null = null
   try {
@@ -135,7 +147,7 @@ async function handleMessage(ctx: Context, rawText: string): Promise<void> {
 
     await sendResponse(ctx, text ?? '(no output)')
   } catch (err) {
-    logger.error({ err }, 'handleMessage failed')
+    log.error({ err }, 'handleMessage failed')
     const msg = err instanceof Error ? err.message : String(err)
     try {
       await ctx.reply(`Error: ${msg.slice(0, 500)}`)
@@ -156,12 +168,10 @@ export function createBot(): Bot {
 
   bot.command('start', async (ctx) => {
     const chatId = String(ctx.chat?.id ?? '')
-    await ctx.reply(
-      `ClaudeClaw online. Chat ID: ${chatId}\n\n` +
-        (ALLOWED_CHAT_ID
-          ? 'Auth configured.'
-          : 'No ALLOWED_CHAT_ID set yet — add this chat ID to your .env.'),
-    )
+    const authLine = ALLOWED_CHAT_IDS.length
+      ? `Auth configured (${ALLOWED_CHAT_IDS.length} chat${ALLOWED_CHAT_IDS.length === 1 ? '' : 's'} allowed).`
+      : 'No ALLOWED_CHAT_IDS set yet — add this chat ID to your .env.'
+    await ctx.reply(`ClaudeClaw online. Chat ID: ${chatId}\n\n${authLine}`)
   })
 
   bot.command('chatid', async (ctx) => {
@@ -189,8 +199,12 @@ export function createBot(): Bot {
   })
 
   bot.on('message:voice', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAuthorised(chatId)) return
+    const { chatId, userId, username } = ctxIdentity(ctx)
+    const log = logger.child({ chatId, userId, username })
+    if (!isAuthorised(chatId)) {
+      log.warn('unauthorised chat (voice)')
+      return
+    }
     if (!voiceCapabilities().stt) {
       await ctx.reply('Voice transcription is not configured (GROQ_API_KEY missing).')
       return
@@ -208,14 +222,18 @@ export function createBot(): Bot {
       await ctx.reply(`Heard: "${transcript.slice(0, 200)}"`).catch(() => {})
       await handleMessage(ctx, `[Voice transcribed]: ${transcript}`)
     } catch (err) {
-      logger.error({ err }, 'voice handler failed')
+      log.error({ err }, 'voice handler failed')
       await ctx.reply(`Voice error: ${(err as Error).message}`).catch(() => {})
     }
   })
 
   bot.on('message:photo', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAuthorised(chatId)) return
+    const { chatId, userId, username } = ctxIdentity(ctx)
+    const log = logger.child({ chatId, userId, username })
+    if (!isAuthorised(chatId)) {
+      log.warn('unauthorised chat (photo)')
+      return
+    }
     try {
       const photos = ctx.message?.photo
       if (!photos?.length) return
@@ -228,14 +246,18 @@ export function createBot(): Bot {
       const caption = ctx.message?.caption ?? ''
       await handleMessage(ctx, buildPhotoMessage(localPath, caption))
     } catch (err) {
-      logger.error({ err }, 'photo handler failed')
+      log.error({ err }, 'photo handler failed')
       await ctx.reply(`Photo error: ${(err as Error).message}`).catch(() => {})
     }
   })
 
   bot.on('message:document', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAuthorised(chatId)) return
+    const { chatId, userId, username } = ctxIdentity(ctx)
+    const log = logger.child({ chatId, userId, username })
+    if (!isAuthorised(chatId)) {
+      log.warn('unauthorised chat (document)')
+      return
+    }
     try {
       const doc = ctx.message?.document
       if (!doc) return
@@ -246,7 +268,7 @@ export function createBot(): Bot {
         buildDocumentMessage(localPath, doc.file_name ?? path.basename(localPath), caption),
       )
     } catch (err) {
-      logger.error({ err }, 'document handler failed')
+      log.error({ err }, 'document handler failed')
       await ctx.reply(`Document error: ${(err as Error).message}`).catch(() => {})
     }
   })
