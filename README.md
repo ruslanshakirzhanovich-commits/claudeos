@@ -12,6 +12,8 @@ Personal AI assistant powered by Claude Code, controlled via Telegram. Your own 
 
 Text your bot on Telegram and it responds as a full agent: reads files, schedules tasks, remembers you, runs skills, works 24/7. All state lives on your machine, no cloud middleman.
 
+**Want the full reference?** See [docs/GUIDE.md](docs/GUIDE.md) — commands, features, deploy flow, troubleshooting.
+
 ---
 
 ### ⚠️ Prerequisites
@@ -108,6 +110,8 @@ Main libraries: [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package
 Персональный AI-ассистент на базе Claude Code, управляемый через Telegram. Ваш собственный Jarvis на вашем сервере.
 
 Пишете боту в Telegram — он отвечает как полноценный агент: читает файлы, планирует задачи, помнит вас, выполняет скиллы, работает круглосуточно. Весь стейт живёт на вашей машине, никаких облачных прокладок.
+
+**Нужен полный справочник?** См. [docs/GUIDE.md](docs/GUIDE.md) — команды, фичи, деплой, траблшутинг.
 
 ---
 
