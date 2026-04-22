@@ -192,7 +192,7 @@ async function handleMessage(
 
     const sessionId = getSession(chatId) ?? undefined
     const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
-    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode })
+    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 

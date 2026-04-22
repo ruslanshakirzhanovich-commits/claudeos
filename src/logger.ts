@@ -9,3 +9,5 @@ export const logger = createLogger({
       ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:HH:MM:ss' } }
       : undefined,
 })
+
+export type Logger = typeof logger

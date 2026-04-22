@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { PROJECT_ROOT, CLAUDE_MD_PATH } from './config.js'
-import { logger } from './logger.js'
+import { logger, type Logger } from './logger.js'
 
 export interface AgentResult {
   text: string | null
@@ -14,6 +14,7 @@ export interface RunAgentOptions {
   sessionId?: string
   onTyping?: () => void
   permissionMode?: PermissionMode
+  log?: Logger
 }
 
 function loadClaudeMd(): string {
@@ -39,7 +40,7 @@ export async function runAgent(
   message: string,
   opts: RunAgentOptions = {},
 ): Promise<AgentResult> {
-  const { sessionId, onTyping, permissionMode = 'bypassPermissions' } = opts
+  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger } = opts
   const wrapped = wrapWithClaudeMd(message)
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
@@ -66,7 +67,7 @@ export async function runAgent(
       }
     }
   } catch (err) {
-    logger.error({ err }, 'runAgent failed')
+    log.error({ err }, 'runAgent failed')
     throw err
   } finally {
     if (typingTimer) clearInterval(typingTimer)
