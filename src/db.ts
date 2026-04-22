@@ -144,6 +144,50 @@ export function isAuthorised(chatId: number | string): boolean {
   return isChatAllowed(String(chatId))
 }
 
+export function backupDatabase(destPath: string): void {
+  getDb().exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`)
+}
+
+export interface BotStats {
+  allowedChats: number
+  totalMemories: number
+  memoriesLast24h: number
+  uniqueChatsWithMemories: number
+  activeTasks: number
+  pausedTasks: number
+}
+
+export function getBotStats(): BotStats {
+  const db = getDb()
+  const cutoff24h = Date.now() - 24 * 60 * 60 * 1000
+  const row = db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM allowed_chats)                                AS allowed,
+         (SELECT COUNT(*) FROM memories)                                     AS mem_total,
+         (SELECT COUNT(*) FROM memories WHERE created_at > ?)                AS mem_recent,
+         (SELECT COUNT(DISTINCT chat_id) FROM memories)                      AS unique_chats,
+         (SELECT COUNT(*) FROM scheduled_tasks WHERE status = 'active')      AS tasks_active,
+         (SELECT COUNT(*) FROM scheduled_tasks WHERE status = 'paused')      AS tasks_paused`,
+    )
+    .get(cutoff24h) as {
+      allowed: number
+      mem_total: number
+      mem_recent: number
+      unique_chats: number
+      tasks_active: number
+      tasks_paused: number
+    }
+  return {
+    allowedChats: row.allowed,
+    totalMemories: row.mem_total,
+    memoriesLast24h: row.mem_recent,
+    uniqueChatsWithMemories: row.unique_chats,
+    activeTasks: row.tasks_active,
+    pausedTasks: row.tasks_paused,
+  }
+}
+
 export function getTtsEnabled(chatId: string): boolean {
   const row = getDb()
     .prepare('SELECT tts_enabled FROM chat_preferences WHERE chat_id = ?')

@@ -48,6 +48,9 @@ Runtime model: bot process stays up 24/7 via systemd (`claudeclaw.service`). Eac
 | `/listusers` | Shows all authorised chats with date added and note | admin only |
 | `/adduser <chat_id> [note]` | Whitelists a new chat immediately, no restart needed | admin only |
 | `/removeuser <chat_id>` | Removes a chat from whitelist | admin only |
+| `/stats` | Bot health: users, memory, scheduler, process RSS/uptime | yes |
+| `/backup` | Creates a consistent SQLite copy in `store/backups/` + uploads it to the admin chat if < 50 MB | admin only |
+| `/ping` | Quick liveness check — returns pid + uptime | no |
 
 All other messages are treated as prompts: plain text goes straight to Claude, voice notes are transcribed first via Groq Whisper, photos/documents are downloaded and passed to Claude with a local path hint.
 
@@ -280,6 +283,9 @@ WhatsApp  ─┘                       │
 | `/listusers` | Список авторизованных чатов с датой добавления и note | только admin |
 | `/adduser <chat_id> [note]` | Добавляет чат в whitelist мгновенно, без рестарта | только admin |
 | `/removeuser <chat_id>` | Удаляет чат из whitelist | только admin |
+| `/stats` | Здоровье бота: юзеры, память, планировщик, RSS/uptime процесса | да |
+| `/backup` | Консистентная копия SQLite в `store/backups/` + отправка файлом в чат админа если < 50 MB | только admin |
+| `/ping` | Быстрая проверка жив ли — возвращает pid + uptime | нет |
 
 Любое другое сообщение — промпт для Claude: текст идёт напрямую, голосовое сначала транскрибируется через Groq Whisper, фото/документы скачиваются и передаются с путём локального файла.
 

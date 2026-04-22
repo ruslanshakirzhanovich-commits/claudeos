@@ -5,6 +5,7 @@ import {
   TELEGRAM_BOT_TOKEN,
   MAX_MESSAGE_LENGTH,
   TYPING_REFRESH_MS,
+  STORE_DIR,
   isAdmin,
 } from './config.js'
 import { runAgent } from './agent.js'
@@ -20,6 +21,8 @@ import {
   addAllowedChat,
   removeAllowedChat,
   countAllowedChats,
+  backupDatabase,
+  getBotStats,
 } from './db.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
@@ -311,6 +314,87 @@ export function createBot(): Bot {
     }
     const removed = removeAllowedChat(targetId)
     await ctx.reply(removed ? `Removed ${targetId}.` : `${targetId} was not in the list.`)
+  })
+
+  bot.command('ping', async (ctx) => {
+    const up = Math.round(process.uptime())
+    const d = Math.floor(up / 86400)
+    const h = Math.floor((up % 86400) / 3600)
+    const m = Math.floor((up % 3600) / 60)
+    const s = up % 60
+    const uptimeStr = d ? `${d}d ${h}h ${m}m` : h ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`
+    await ctx.reply(`pong · pid ${process.pid} · uptime ${uptimeStr}`)
+  })
+
+  bot.command('stats', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) return
+    const s = getBotStats()
+    const mem = process.memoryUsage()
+    const rssMb = (mem.rss / (1024 * 1024)).toFixed(0)
+    const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(0)
+    const up = Math.round(process.uptime())
+    const d = Math.floor(up / 86400)
+    const h = Math.floor((up % 86400) / 3600)
+    const m = Math.floor((up % 3600) / 60)
+    const uptimeStr = d ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`
+
+    const body = [
+      `<b>ClaudeClaw stats</b>`,
+      ``,
+      `<b>Users</b>`,
+      `  authorised chats: ${s.allowedChats}`,
+      `  chats with memory: ${s.uniqueChatsWithMemories}`,
+      ``,
+      `<b>Memory</b>`,
+      `  total records: ${s.totalMemories}`,
+      `  added last 24h: ${s.memoriesLast24h}`,
+      ``,
+      `<b>Scheduler</b>`,
+      `  active tasks: ${s.activeTasks}`,
+      `  paused tasks: ${s.pausedTasks}`,
+      ``,
+      `<b>Process</b>`,
+      `  pid: ${process.pid}`,
+      `  uptime: ${uptimeStr}`,
+      `  memory (RSS / heap): ${rssMb}MB / ${heapMb}MB`,
+      `  node: ${process.versions.node}`,
+    ].join('\n')
+
+    await ctx.reply(body, { parse_mode: 'HTML' })
+  })
+
+  bot.command('backup', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAdmin(chatId)) {
+      await ctx.reply('Admin only.')
+      return
+    }
+    try {
+      const backupsDir = path.join(STORE_DIR, 'backups')
+      if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true })
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const destPath = path.join(backupsDir, `claudeclaw-${stamp}.db`)
+      backupDatabase(destPath)
+      const size = fs.statSync(destPath).size
+      const sizeMb = (size / (1024 * 1024)).toFixed(2)
+      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)`, { parse_mode: 'HTML' })
+
+      const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
+      if (size <= TELEGRAM_FILE_LIMIT) {
+        try {
+          await ctx.replyWithDocument(new InputFile(destPath))
+        } catch (err) {
+          logger.warn({ err }, 'backup upload to Telegram failed')
+          await ctx.reply('(Backup saved locally but upload to Telegram failed — file is on the server.)')
+        }
+      } else {
+        await ctx.reply(`(File >${TELEGRAM_FILE_LIMIT / 1024 / 1024}MB — not uploading to Telegram. Grab from server.)`)
+      }
+    } catch (err) {
+      logger.error({ err }, 'backup failed')
+      await ctx.reply(`Backup failed: ${(err as Error).message.slice(0, 200)}`)
+    }
   })
 
   bot.command('voice', async (ctx) => {
