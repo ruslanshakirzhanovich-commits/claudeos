@@ -187,7 +187,8 @@ async function handleMessage(
     const messageForAgent = memoryContext ? `${memoryContext}\n\n${rawText}` : rawText
 
     const sessionId = getSession(chatId) ?? undefined
-    const { text, newSessionId } = await runAgent(messageForAgent, sessionId)
+    const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
+    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 

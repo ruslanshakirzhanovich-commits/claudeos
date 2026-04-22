@@ -8,6 +8,14 @@ export interface AgentResult {
   newSessionId?: string
 }
 
+export type PermissionMode = 'bypassPermissions' | 'acceptEdits' | 'default' | 'plan'
+
+export interface RunAgentOptions {
+  sessionId?: string
+  onTyping?: () => void
+  permissionMode?: PermissionMode
+}
+
 function loadClaudeMd(): string {
   try {
     return fs.readFileSync(CLAUDE_MD_PATH, 'utf8').trim()
@@ -29,9 +37,9 @@ function wrapWithClaudeMd(userMessage: string): string {
 
 export async function runAgent(
   message: string,
-  sessionId?: string,
-  onTyping?: () => void,
+  opts: RunAgentOptions = {},
 ): Promise<AgentResult> {
+  const { sessionId, onTyping, permissionMode = 'bypassPermissions' } = opts
   const wrapped = wrapWithClaudeMd(message)
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
@@ -43,7 +51,7 @@ export async function runAgent(
     const options: Record<string, unknown> = {
       cwd: PROJECT_ROOT,
       settingSources: ['project', 'user'],
-      permissionMode: 'bypassPermissions',
+      permissionMode,
     }
     if (sessionId) options['resume'] = sessionId
 

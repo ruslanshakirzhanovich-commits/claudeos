@@ -30,7 +30,9 @@ export async function handleWhatsAppMessage(
     const messageForAgent = memoryContext ? `${memoryContext}\n\n${text}` : text
 
     const sessionId = getSession(jid) ?? undefined
-    const { text: reply, newSessionId } = await runAgent(messageForAgent, sessionId)
+    // WhatsApp users are non-admin by design — no ADMIN_WHATSAPP_NUMBERS concept yet.
+    // They get `plan` mode: Claude can read/reason, cannot execute shell or edit files.
+    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan' })
 
     if (newSessionId && newSessionId !== sessionId) setSession(jid, newSessionId)
 

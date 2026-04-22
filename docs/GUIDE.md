@@ -63,10 +63,17 @@ All other messages are treated as prompts: plain text goes straight to Claude, v
 **How to enable:** list comma-separated chat IDs in `.env`:
 ```
 ALLOWED_CHAT_IDS=110440505,987654321
+ADMIN_CHAT_IDS=110440505   # optional — defaults to first ALLOWED_CHAT_IDS entry
 ```
-Empty list = allow any chat (first-run mode). Legacy `ALLOWED_CHAT_ID` (singular) still reads as fallback.
+Empty `ALLOWED_CHAT_IDS` = allow any chat (first-run mode). Legacy `ALLOWED_CHAT_ID` (singular) still reads as fallback.
 
-**How it works:** every DB query is keyed on `chat_id` (the Telegram chat ID, as string). The check itself is one line in `src/config.ts` (`isAuthorised`). Every handler adds a child logger with `{chatId, userId, username}` so logs show who said what.
+**How it works:** every DB query is keyed on `chat_id` (the Telegram chat ID, as string). The auth check is in `src/db.ts` (`isAuthorised`). Every handler adds a child logger with `{chatId, userId, username}` so logs show who said what.
+
+**Permission tiers (important for safety):**
+- **Admins** (`ADMIN_CHAT_IDS`) — Claude runs in `bypassPermissions` mode, can execute any tool (bash, write files, web fetch). Full power.
+- **Regular users** (in `ALLOWED_CHAT_IDS` but not admin) — Claude runs in `plan` mode: can read files and reason, **cannot execute shell commands or modify anything**. Safe for sharing the bot with friends/family without giving them server-level access.
+
+If a regular user asks the bot to do something destructive, Claude will refuse or describe what it WOULD do without actually doing it. To grant full power, add them to `ADMIN_CHAT_IDS` and restart.
 
 #### 3.2 Voice messages in (STT via Groq Whisper)
 
@@ -350,10 +357,17 @@ WhatsApp  ─┘                       │
 **Как включить:** перечисли chat ID через запятую в `.env`:
 ```
 ALLOWED_CHAT_IDS=110440505,987654321
+ADMIN_CHAT_IDS=110440505   # опционально — fallback на первый из ALLOWED_CHAT_IDS
 ```
-Пустой список = пропускать любые чаты (режим первого запуска). Старый singular-ключ `ALLOWED_CHAT_ID` читается как fallback для совместимости.
+Пустой `ALLOWED_CHAT_IDS` = пропускать любые чаты (режим первого запуска). Старый singular-ключ `ALLOWED_CHAT_ID` читается как fallback для совместимости.
 
-**Как работает:** каждый SQL-запрос в БД фильтруется по `chat_id` (Telegram chat ID как строка). Сама проверка — одна функция в `src/config.ts` (`isAuthorised`). В каждый хендлер прикручен child-logger с `{chatId, userId, username}` — в логах видно кто что пишет.
+**Как работает:** каждый SQL-запрос в БД фильтруется по `chat_id` (Telegram chat ID как строка). Проверка авторизации — функция `isAuthorised` в `src/db.ts`. В каждый хендлер прикручен child-logger с `{chatId, userId, username}` — в логах видно кто что пишет.
+
+**Уровни доступа (важно для безопасности):**
+- **Админы** (`ADMIN_CHAT_IDS`) — Claude работает в режиме `bypassPermissions`, может выполнить любой tool (bash, правка файлов, web fetch). Полные права.
+- **Обычные юзеры** (в `ALLOWED_CHAT_IDS` но не админы) — Claude работает в режиме `plan`: может читать и рассуждать, **не может выполнять shell-команды и менять файлы**. Безопасно давать бот друзьям/родственникам без риска доступа к серверу.
+
+Если обычный юзер попросит что-то деструктивное, Claude откажет или опишет что БЫ он сделал, но не выполнит. Чтобы выдать полные права — добавь его в `ADMIN_CHAT_IDS` и рестартни.
 
 #### 3.2 Голосовые сообщения боту (STT через Groq Whisper)
 

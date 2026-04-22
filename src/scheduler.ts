@@ -60,7 +60,8 @@ export async function runDueTasks(send: Sender): Promise<void> {
     logger.info({ id: task.id, prompt: task.prompt.slice(0, 60) }, 'running scheduled task')
     try {
       await send(task.chat_id, `Running scheduled task: ${task.prompt.slice(0, 120)}`)
-      const { text } = await runAgent(task.prompt)
+      // Scheduled tasks are admin-created via CLI — keep full permissions.
+      const { text } = await runAgent(task.prompt, { permissionMode: 'bypassPermissions' })
       const result = text ?? '(no output)'
       await send(task.chat_id, result)
       const nextRun = computeNextRun(task.schedule)
