@@ -11,3 +11,7 @@ workspace/
 *.backup
 .vscode/
 .idea/
+
+# Reference-only unzipped archives (not part of this project)
+openclaw-main/
+openclaw-main.zip
