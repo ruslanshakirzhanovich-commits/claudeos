@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS } from './config.js'
+import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
 import { initDatabase, seedAllowedChatsFromEnv } from './db.js'
+import { createPreviewServer } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
 import { runDecaySweep } from './memory.js'
@@ -96,6 +97,8 @@ async function main(): Promise<void> {
 
   initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
 
+  const previewServer = PREVIEW_ENABLED ? createPreviewServer(PREVIEW_PORT) : null
+
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'shutting down')
     clearInterval(decayTimer)
@@ -106,6 +109,7 @@ async function main(): Promise<void> {
       /* ignore */
     }
     await stopWhatsApp()
+    if (previewServer) previewServer.close()
     releaseLock()
     process.exit(0)
   }
