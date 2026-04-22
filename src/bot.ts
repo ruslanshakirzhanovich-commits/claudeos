@@ -25,6 +25,7 @@ import {
   getBotStats,
   touchAllowedChat,
   getSchemaVersion,
+  verifyBackup,
 } from './db.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
@@ -384,7 +385,17 @@ export function createBot(): Bot {
       backupDatabase(destPath)
       const size = fs.statSync(destPath).size
       const sizeMb = (size / (1024 * 1024)).toFixed(2)
-      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)`, { parse_mode: 'HTML' })
+
+      let verifyLine = ''
+      try {
+        const v = verifyBackup(destPath)
+        verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
+      } catch (err) {
+        await ctx.reply(`Backup saved but failed verification: ${(err as Error).message.slice(0, 200)}`)
+        return
+      }
+
+      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}`, { parse_mode: 'HTML' })
 
       const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
       if (size <= TELEGRAM_FILE_LIMIT) {

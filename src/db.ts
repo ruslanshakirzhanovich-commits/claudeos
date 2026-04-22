@@ -92,6 +92,26 @@ export function backupDatabase(destPath: string): void {
   getDb().exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`)
 }
 
+export interface BackupVerification {
+  schemaVersion: number
+  sessions: number
+  memories: number
+  allowedChats: number
+}
+
+export function verifyBackup(backupPath: string): BackupVerification {
+  const handle = new BetterSqlite3(backupPath, { readonly: true, fileMustExist: true }) as InstanceType<typeof Database>
+  try {
+    const schemaVersion = handle.pragma('user_version', { simple: true }) as number
+    const sessions = (handle.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c
+    const memories = (handle.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
+    const allowedChats = (handle.prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }).c
+    return { schemaVersion, sessions, memories, allowedChats }
+  } finally {
+    handle.close()
+  }
+}
+
 export interface BotStats {
   allowedChats: number
   totalMemories: number
