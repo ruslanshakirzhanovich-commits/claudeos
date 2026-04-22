@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@clack/prompts": "^1.2.0",
+    "@playwright/mcp": "^0.0.70",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.9.0",
     "@types/qrcode": "^1.5.6",

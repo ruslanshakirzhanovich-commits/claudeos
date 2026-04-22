@@ -50,6 +50,7 @@ After 2–3 minutes `claudeclaw.service` is up and will auto-start on reboot.
 - **Task scheduler** — cron-like scheduler (`schedule-cli.js`), the bot can set its own reminders and morning summaries
 - **Skills** — everything in `~/.claude/skills/` is available: Gmail, Calendar, Obsidian, agent-browser, plus anything you plug in
 - **Multi-user mode** — whitelist multiple Telegram chats via `ALLOWED_CHAT_IDS` (comma-separated); each user gets an isolated memory bucket, and user identity is tagged in every log line
+- **Browser control via Playwright MCP** — optional. `.mcp.json` ships a `playwright` server; activate with `npx playwright install chromium` (one-time, ~300MB). The bot can then open pages, click, scroll, extract text. Skip if you don't want Chromium on the server.
 - **24/7 autostart** — `systemd` brings the service back up on reboot or crash
 
 ---
@@ -146,6 +147,7 @@ curl -fsSL https://raw.githubusercontent.com/ruslanshakirzhanovich-commits/claud
 - **Планировщик задач** — cron-подобный scheduler (`schedule-cli.js`), бот может сам себе ставить напоминания и утренние саммари
 - **Скиллы** — всё, что лежит в `~/.claude/skills/`, доступно боту: Gmail, Calendar, Obsidian, agent-browser, всё, что вы сами подключите
 - **Мульти-юзер режим** — несколько разрешённых Telegram-чатов через `ALLOWED_CHAT_IDS` (через запятую); у каждого пользователя изолированная память, а в логах видно от какого юзера сообщение
+- **Управление браузером через Playwright MCP** — опционально. В `.mcp.json` уже прописан `playwright`-сервер; для активации одной командой поставьте Chromium: `npx playwright install chromium` (~300MB, разово). После этого бот сможет открывать страницы, кликать, скроллить, вытаскивать текст. Пропустите, если Chromium на сервере не нужен
 - **Автозапуск 24/7** — `systemd` поднимает сервис после ребута и перезапускает при падении
 
 ---
