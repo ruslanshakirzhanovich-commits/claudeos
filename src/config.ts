@@ -53,6 +53,8 @@ export function isAdmin(chatId: number | string): boolean {
 export const PREVIEW_ENABLED = (env['PREVIEW_ENABLED'] ?? '').trim() === '1'
 export const PREVIEW_PORT = Number(env['PREVIEW_PORT'] ?? '8080') || 8080
 export const PREVIEW_HOST = (env['PREVIEW_HOST'] ?? '').trim()
+export const PREVIEW_USER = (env['PREVIEW_USER'] ?? '').trim()
+export const PREVIEW_PASSWORD = (env['PREVIEW_PASSWORD'] ?? '').trim()
 
 export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'
 export const WHATSAPP_PROVIDER = (env['WHATSAPP_PROVIDER'] ?? 'baileys').trim()

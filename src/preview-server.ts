@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import http from 'node:http'
-import { WORKSPACE_DIR } from './config.js'
+import { WORKSPACE_DIR, PREVIEW_USER, PREVIEW_PASSWORD } from './config.js'
 import { logger } from './logger.js'
 
 const PREVIEWS_DIR = path.join(WORKSPACE_DIR, 'previews')
@@ -57,6 +57,31 @@ export function cleanupOldPreviews(maxAgeMs: number = 30 * 24 * 60 * 60 * 1000):
 function sendStatus(res: http.ServerResponse, code: number, body: string): void {
   res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' })
   res.end(body)
+}
+
+function basicAuthPasses(req: http.IncomingMessage): boolean {
+  if (!PREVIEW_PASSWORD) return true
+  const header = req.headers['authorization']
+  if (typeof header !== 'string' || !header.startsWith('Basic ')) return false
+  try {
+    const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8')
+    const sep = decoded.indexOf(':')
+    if (sep < 0) return false
+    const user = decoded.slice(0, sep)
+    const pass = decoded.slice(sep + 1)
+    const expectedUser = PREVIEW_USER || 'admin'
+    return user === expectedUser && pass === PREVIEW_PASSWORD
+  } catch {
+    return false
+  }
+}
+
+function sendAuthChallenge(res: http.ServerResponse): void {
+  res.writeHead(401, {
+    'WWW-Authenticate': 'Basic realm="ClaudeOS previews", charset="UTF-8"',
+    'Content-Type': 'text/plain; charset=utf-8',
+  })
+  res.end('Authentication required')
 }
 
 function resolveSafePath(urlPath: string): string | null {
@@ -116,6 +141,10 @@ export function createPreviewServer(port: number): http.Server {
   const server = http.createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       sendStatus(res, 405, 'Method Not Allowed')
+      return
+    }
+    if (!basicAuthPasses(req)) {
+      sendAuthChallenge(res)
       return
     }
     const urlPath = req.url ?? '/'
