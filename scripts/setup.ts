@@ -1,311 +1,410 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
-import readline from 'node:readline/promises'
-import { stdin as input, stdout as output } from 'node:process'
-import { execSync, spawn, spawnSync } from 'node:child_process'
+import https from 'node:https'
+import { execSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import {
+  intro,
+  outro,
+  note,
+  text,
+  password,
+  confirm,
+  select,
+  spinner,
+  isCancel,
+  cancel,
+  log,
+} from '@clack/prompts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const PROJECT_ROOT = path.resolve(__dirname, '..')
+const ENV_PATH = path.join(PROJECT_ROOT, '.env')
 
-const C = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  bold: '\x1b[1m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  cyan: '\x1b[36m',
-  magenta: '\x1b[35m',
+const TELEGRAM_TOKEN_RE = /^\d{6,}:[A-Za-z0-9_-]{30,}$/
+const CHAT_ID_RE = /^-?\d+$/
+
+type EnvMap = Record<string, string>
+
+function readEnv(): EnvMap {
+  if (!fs.existsSync(ENV_PATH)) return {}
+  const out: EnvMap = {}
+  for (const line of fs.readFileSync(ENV_PATH, 'utf8').split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t || t.startsWith('#')) continue
+    const eq = t.indexOf('=')
+    if (eq < 0) continue
+    const k = t.slice(0, eq).trim()
+    let v = t.slice(eq + 1).trim()
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1)
+    }
+    out[k] = v
+  }
+  return out
 }
 
-const ok = (msg: string) => process.stdout.write(`${C.green}✓${C.reset} ${msg}\n`)
-const warn = (msg: string) => process.stdout.write(`${C.yellow}⚠${C.reset} ${msg}\n`)
-const fail = (msg: string) => process.stdout.write(`${C.red}✗${C.reset} ${msg}\n`)
-const info = (msg: string) => process.stdout.write(`${C.cyan}→${C.reset} ${msg}\n`)
-const header = (msg: string) =>
-  process.stdout.write(`\n${C.bold}${C.magenta}── ${msg} ──${C.reset}\n\n`)
-
-const BANNER = `
- ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗
-██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝
-██║     ██║     ███████║██║   ██║██║  ██║█████╗
-██║     ██║     ██╔══██║██║   ██║██║  ██║██╔══╝
-╚██████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗
- ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝╚══════╝
- ██████╗██╗      █████╗ ██╗    ██╗
-██╔════╝██║     ██╔══██╗██║    ██║
-██║     ██║     ███████║██║ █╗ ██║
-██║     ██║     ██╔══██║██║███╗██║
-╚██████╗███████╗██║  ██║╚███╔███╔╝
- ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
-`
-
-function writeEnv(values: Record<string, string>): void {
-  const envPath = path.join(PROJECT_ROOT, '.env')
-  let existing: Record<string, string> = {}
-  if (fs.existsSync(envPath)) {
-    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const eq = trimmed.indexOf('=')
-      if (eq < 0) continue
-      const k = trimmed.slice(0, eq).trim()
-      let v = trimmed.slice(eq + 1).trim()
-      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-        v = v.slice(1, -1)
-      }
-      existing[k] = v
-    }
-  }
-  const merged = { ...existing, ...values }
+function writeEnv(values: EnvMap): void {
+  const merged = { ...readEnv(), ...values }
   const lines = Object.entries(merged).map(([k, v]) => {
     const needsQuote = /\s|["'#]/.test(v)
     return needsQuote ? `${k}="${v.replace(/"/g, '\\"')}"` : `${k}=${v}`
   })
-  fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8')
+  fs.writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf8')
+  try {
+    fs.chmodSync(ENV_PATH, 0o600)
+  } catch {
+    /* ignore on filesystems that don't support chmod */
+  }
+}
+
+function bail(): never {
+  cancel('Setup cancelled.')
+  process.exit(1)
+}
+
+function v<T>(value: T | symbol): T {
+  if (isCancel(value)) bail()
+  return value as T
+}
+
+function notEmpty(label: string) {
+  return (s: string) => {
+    const t = s.trim()
+    if (!t) return `${label} can't be empty.`
+    if (t === 'undefined' || t === 'null') return `${label} looks like a literal "${t}" — paste the real value.`
+    return undefined
+  }
+}
+
+async function httpGet(hostname: string, pathname: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    https
+      .get({ hostname, path: pathname, headers }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }),
+        )
+      })
+      .on('error', reject)
+  })
+}
+
+async function verifyTelegramToken(token: string): Promise<string> {
+  const { status, body } = await httpGet('api.telegram.org', `/bot${token}/getMe`)
+  if (status !== 200) throw new Error(`Telegram API ${status}: ${body.slice(0, 200)}`)
+  const parsed = JSON.parse(body) as { ok: boolean; result?: { username?: string }; description?: string }
+  if (!parsed.ok) throw new Error(parsed.description ?? 'Telegram rejected the token')
+  return parsed.result?.username ?? 'unknown'
+}
+
+async function verifyElevenLabsKey(key: string): Promise<string> {
+  const { status, body } = await httpGet('api.elevenlabs.io', '/v1/user', { 'xi-api-key': key })
+  if (status !== 200) throw new Error(`ElevenLabs ${status}: ${body.slice(0, 200)}`)
+  const parsed = JSON.parse(body) as { subscription?: { tier?: string }; xi_api_key?: string }
+  return parsed.subscription?.tier ?? 'free'
 }
 
 async function checkRequirements(): Promise<void> {
-  header('Checking requirements')
+  const s = spinner()
+  s.start('Checking requirements')
 
-  const nodeVersion = process.versions.node
-  const major = Number(nodeVersion.split('.')[0])
+  const major = Number(process.versions.node.split('.')[0])
   if (major < 20) {
-    fail(`Node.js >= 20 required. You have ${nodeVersion}.`)
+    s.stop(`Node.js >= 20 required (found ${process.versions.node})`, 1)
     process.exit(1)
   }
-  ok(`Node.js ${nodeVersion}`)
 
+  let claudeLine = 'not found'
   try {
-    const out = execSync('claude --version', { stdio: ['ignore', 'pipe', 'ignore'] })
+    claudeLine = execSync('claude --version', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
-      .trim()
-    ok(`Claude CLI: ${out || 'present'}`)
+      .trim() || 'present'
   } catch {
-    warn('`claude` CLI not found on PATH. Install it from https://claude.com/code and run `claude login` before continuing.')
+    /* optional */
   }
 
+  s.stop(`Node ${process.versions.node} · Claude CLI: ${claudeLine}`)
+  if (claudeLine === 'not found') {
+    log.warn('`claude` not on PATH. Install from https://claude.com/code and run `claude login` before starting the bot.')
+  }
+}
+
+async function sectionTelegram(existing: EnvMap): Promise<string> {
+  note(
+    'Get a token from @BotFather: https://t.me/BotFather → /newbot\nPaste the token below. Format: 123456789:ABC…',
+    'Telegram bot',
+  )
+
+  while (true) {
+    const token = v(
+      await password({
+        message: 'TELEGRAM_BOT_TOKEN',
+        mask: '•',
+        validate: (s) => {
+          if (!s.trim()) return 'Required.'
+          if (!TELEGRAM_TOKEN_RE.test(s.trim())) return 'Does not look like a bot token (expected `<digits>:<chars>`).'
+          return undefined
+        },
+      }),
+    )
+
+    const s = spinner()
+    s.start('Verifying token with Telegram')
+    try {
+      const username = await verifyTelegramToken(token.trim())
+      s.stop(`Token valid — bot is @${username}`)
+      return token.trim()
+    } catch (err) {
+      s.stop(`Invalid token: ${(err as Error).message}`, 1)
+      const retry = v(await confirm({ message: 'Try another token?', initialValue: true }))
+      if (!retry) {
+        if (existing['TELEGRAM_BOT_TOKEN']) {
+          log.info('Keeping existing TELEGRAM_BOT_TOKEN in .env.')
+          return existing['TELEGRAM_BOT_TOKEN']
+        }
+        bail()
+      }
+    }
+  }
+}
+
+async function sectionAuthorization(existing: EnvMap): Promise<string> {
+  note(
+    'Comma-separated chat IDs that can talk to the bot.\nLeave blank and the bot will let any chat through temporarily — use /chatid to get yours, then re-run this wizard.',
+    'Authorization',
+  )
+
+  const fallback = existing['ALLOWED_CHAT_IDS'] ?? existing['ALLOWED_CHAT_ID'] ?? ''
+  const raw = v(
+    await text({
+      message: 'ALLOWED_CHAT_IDS',
+      placeholder: '110440505,200300400',
+      initialValue: fallback,
+      validate: (s) => {
+        const trimmed = s.trim()
+        if (!trimmed) return undefined
+        const ids = trimmed.split(',').map((x) => x.trim()).filter(Boolean)
+        for (const id of ids) {
+          if (!CHAT_ID_RE.test(id)) return `"${id}" is not a numeric chat ID.`
+        }
+        return undefined
+      },
+    }),
+  )
+  return raw.trim()
+}
+
+async function sectionSTT(existing: EnvMap): Promise<string> {
+  note(
+    'Groq Whisper transcribes voice messages. Free tier is generous.\nGet a key: https://console.groq.com',
+    'Voice (STT)',
+  )
+
+  const want = v(
+    await confirm({
+      message: 'Configure Groq now?',
+      initialValue: Boolean(existing['GROQ_API_KEY']),
+    }),
+  )
+  if (!want) return existing['GROQ_API_KEY'] ?? ''
+
+  const key = v(
+    await password({
+      message: 'GROQ_API_KEY' + (existing['GROQ_API_KEY'] ? ' (leave blank to keep existing)' : ''),
+      mask: '•',
+      validate: (s) => {
+        const t = s.trim()
+        if (!t && existing['GROQ_API_KEY']) return undefined
+        if (!t) return 'Required.'
+        if (t === 'undefined' || t === 'null') return `Looks like literal "${t}".`
+        return undefined
+      },
+    }),
+  )
+  return key.trim() || existing['GROQ_API_KEY'] || ''
+}
+
+interface TtsConfig {
+  apiKey: string
+  voiceId: string
+  modelId: string
+  maxChars: string
+}
+
+async function sectionTTS(existing: EnvMap): Promise<TtsConfig | null> {
+  note(
+    'ElevenLabs TTS lets the bot reply with voice messages.\nGet a key + pick a voice: https://elevenlabs.io/app/voice-library',
+    'Voice replies (TTS)',
+  )
+
+  const want = v(
+    await confirm({
+      message: 'Configure ElevenLabs now?',
+      initialValue: Boolean(existing['ELEVENLABS_API_KEY']),
+    }),
+  )
+  if (!want) {
+    return existing['ELEVENLABS_API_KEY'] && existing['ELEVENLABS_VOICE_ID']
+      ? {
+          apiKey: existing['ELEVENLABS_API_KEY'],
+          voiceId: existing['ELEVENLABS_VOICE_ID'],
+          modelId: existing['ELEVENLABS_MODEL_ID'] ?? 'eleven_multilingual_v2',
+          maxChars: existing['TTS_MAX_CHARS'] ?? '800',
+        }
+      : null
+  }
+
+  let apiKey = ''
+  while (true) {
+    const input = v(
+      await password({
+        message: 'ELEVENLABS_API_KEY' + (existing['ELEVENLABS_API_KEY'] ? ' (blank to keep)' : ''),
+        mask: '•',
+        validate: notEmpty('Key'),
+      }),
+    )
+    const candidate = input.trim() || existing['ELEVENLABS_API_KEY'] || ''
+    if (!candidate) continue
+
+    const s = spinner()
+    s.start('Verifying key with ElevenLabs')
+    try {
+      const tier = await verifyElevenLabsKey(candidate)
+      s.stop(`Key valid — plan: ${tier}`)
+      apiKey = candidate
+      break
+    } catch (err) {
+      s.stop(`Invalid key: ${(err as Error).message}`, 1)
+      const retry = v(await confirm({ message: 'Try another key?', initialValue: true }))
+      if (!retry) return null
+    }
+  }
+
+  const voiceId = v(
+    await text({
+      message: 'ELEVENLABS_VOICE_ID',
+      placeholder: '21m00Tcm4TlvDq8ikWAM',
+      initialValue: existing['ELEVENLABS_VOICE_ID'] ?? '',
+      validate: notEmpty('Voice ID'),
+    }),
+  )
+
+  const modelId = v(
+    await select({
+      message: 'Model',
+      initialValue: existing['ELEVENLABS_MODEL_ID'] ?? 'eleven_multilingual_v2',
+      options: [
+        { value: 'eleven_multilingual_v2', label: 'eleven_multilingual_v2 (default, balanced)' },
+        { value: 'eleven_turbo_v2_5', label: 'eleven_turbo_v2_5 (faster, cheaper)' },
+        { value: 'eleven_v3', label: 'eleven_v3 (higher quality)' },
+      ],
+    }),
+  )
+
+  const maxCharsRaw = v(
+    await text({
+      message: 'TTS_MAX_CHARS (cap per voice reply)',
+      placeholder: '800',
+      initialValue: existing['TTS_MAX_CHARS'] ?? '800',
+      validate: (s) => {
+        const n = Number(s.trim())
+        if (!Number.isFinite(n) || n < 50) return 'Must be a number >= 50.'
+        return undefined
+      },
+    }),
+  )
+
+  return { apiKey, voiceId: voiceId.trim(), modelId: modelId as string, maxChars: maxCharsRaw.trim() }
+}
+
+async function sectionClaudeMd(): Promise<void> {
+  const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md')
+  if (!fs.existsSync(claudeMd)) return
+
+  const open = v(
+    await confirm({
+      message: 'Open CLAUDE.md (bot personality prompt) in $EDITOR?',
+      initialValue: false,
+    }),
+  )
+  if (!open) return
+
+  const editor = process.env['EDITOR'] || process.env['VISUAL'] || 'vi'
+  const res = spawnSync(editor, [claudeMd], { stdio: 'inherit' })
+  if (res.status !== 0) log.warn(`Editor exited with status ${res.status ?? '?'}.`)
+}
+
+async function sectionBuild(): Promise<void> {
   const nodeModules = path.join(PROJECT_ROOT, 'node_modules')
   if (!fs.existsSync(nodeModules)) {
-    info('Running `npm install` (first-time setup)…')
-    const res = spawnSync('npm', ['install'], { cwd: PROJECT_ROOT, stdio: 'inherit' })
+    const s = spinner()
+    s.start('Running npm install')
+    const res = spawnSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: PROJECT_ROOT })
     if (res.status !== 0) {
-      fail('npm install failed.')
+      s.stop('npm install failed', 1)
       process.exit(1)
     }
-  } else {
-    ok('node_modules present')
+    s.stop('Dependencies installed')
   }
 
-  info('Building TypeScript (`npm run build`)…')
-  const build = spawnSync('npm', ['run', 'build'], { cwd: PROJECT_ROOT, stdio: 'inherit' })
-  if (build.status !== 0) {
-    fail('Build failed. Fix errors above and re-run `npm run setup`.')
+  const s = spinner()
+  s.start('Building TypeScript')
+  const res = spawnSync('npm', ['run', 'build'], { cwd: PROJECT_ROOT })
+  if (res.status !== 0) {
+    s.stop('Build failed — run `npm run build` manually to see errors', 1)
     process.exit(1)
   }
-  ok('Build complete')
-}
-
-async function collectConfig(rl: readline.Interface): Promise<Record<string, string>> {
-  header('Configuration')
-
-  info('Get a Telegram bot token from @BotFather: https://t.me/BotFather → /newbot')
-  const telegramToken = (await rl.question('TELEGRAM_BOT_TOKEN: ')).trim()
-  if (!telegramToken) {
-    fail('TELEGRAM_BOT_TOKEN is required.')
-    process.exit(1)
-  }
-
-  process.stdout.write('\n')
-  info('Voice transcription uses Groq Whisper. Key is free at https://console.groq.com')
-  info('Leave blank to disable voice transcription.')
-  const groqKey = (await rl.question('GROQ_API_KEY (optional): ')).trim()
-
-  const values: Record<string, string> = { TELEGRAM_BOT_TOKEN: telegramToken }
-  if (groqKey) values['GROQ_API_KEY'] = groqKey
-  writeEnv(values)
-  ok('.env written')
-  return values
-}
-
-async function personaliseClaudeMd(rl: readline.Interface): Promise<void> {
-  header('Personalise CLAUDE.md')
-  info('CLAUDE.md is your assistant\'s system prompt. I\'ll open it in your editor.')
-  const answer = (await rl.question('Open CLAUDE.md now? [Y/n]: ')).trim().toLowerCase()
-  if (answer && answer !== 'y' && answer !== 'yes') {
-    warn('Skipped. You can edit CLAUDE.md manually any time.')
-    return
-  }
-  const editor = process.env['EDITOR'] || process.env['VISUAL'] || (process.platform === 'win32' ? 'notepad' : 'vi')
-  const res = spawnSync(editor, [path.join(PROJECT_ROOT, 'CLAUDE.md')], { stdio: 'inherit' })
-  if (res.status === 0) ok('CLAUDE.md saved')
-  else warn('Editor exited with a non-zero status.')
-}
-
-function installService(): void {
-  header('Install as background service')
-  const platform = process.platform
-  if (platform === 'darwin') {
-    installLaunchd()
-  } else if (platform === 'linux') {
-    installSystemd()
-  } else if (platform === 'win32') {
-    info('On Windows, install PM2 globally:')
-    info('  npm install -g pm2')
-    info('Then start ClaudeClaw:')
-    info(`  pm2 start "node ${path.join(PROJECT_ROOT, 'dist', 'index.js')}" --name claudeclaw`)
-    info('  pm2 save && pm2 startup')
-  } else {
-    warn(`Unknown platform: ${platform}. Start manually with: npm run start`)
-  }
-}
-
-function installLaunchd(): void {
-  const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.claudeclaw.app.plist')
-  const nodePath = execSync('which node').toString().trim() || '/usr/local/bin/node'
-  const scriptPath = path.join(PROJECT_ROOT, 'dist', 'index.js')
-
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>com.claudeclaw.app</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${nodePath}</string>
-    <string>${scriptPath}</string>
-  </array>
-  <key>WorkingDirectory</key><string>${PROJECT_ROOT}</string>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
-  <key>StandardOutPath</key><string>/tmp/claudeclaw.log</string>
-  <key>StandardErrorPath</key><string>/tmp/claudeclaw.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
-  </dict>
-</dict>
-</plist>
-`
-  fs.mkdirSync(path.dirname(plistPath), { recursive: true })
-  fs.writeFileSync(plistPath, plist)
-  ok(`Wrote ${plistPath}`)
-
-  try {
-    spawnSync('launchctl', ['unload', plistPath], { stdio: 'ignore' })
-    const res = spawnSync('launchctl', ['load', plistPath], { stdio: 'inherit' })
-    if (res.status === 0) {
-      ok('Service loaded and running. Logs: /tmp/claudeclaw.log')
-    } else {
-      warn('launchctl load failed. Load manually:')
-      warn(`  launchctl load ${plistPath}`)
-    }
-  } catch (err) {
-    warn(`launchctl error: ${(err as Error).message}`)
-  }
-}
-
-function installSystemd(): void {
-  const unitDir = path.join(os.homedir(), '.config', 'systemd', 'user')
-  const unitPath = path.join(unitDir, 'claudeclaw.service')
-  const nodePath = execSync('which node').toString().trim() || '/usr/bin/node'
-  const scriptPath = path.join(PROJECT_ROOT, 'dist', 'index.js')
-
-  const unit = `[Unit]
-Description=ClaudeClaw — Telegram ↔ Claude Code bridge
-After=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=${PROJECT_ROOT}
-ExecStart=${nodePath} ${scriptPath}
-Restart=always
-RestartSec=10
-StandardOutput=append:/tmp/claudeclaw.log
-StandardError=append:/tmp/claudeclaw.log
-
-[Install]
-WantedBy=default.target
-`
-  fs.mkdirSync(unitDir, { recursive: true })
-  fs.writeFileSync(unitPath, unit)
-  ok(`Wrote ${unitPath}`)
-
-  try {
-    spawnSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'inherit' })
-    spawnSync('systemctl', ['--user', 'enable', 'claudeclaw.service'], { stdio: 'inherit' })
-    const res = spawnSync('systemctl', ['--user', 'start', 'claudeclaw.service'], {
-      stdio: 'inherit',
-    })
-    if (res.status === 0) {
-      ok('Service enabled and started. Logs: /tmp/claudeclaw.log')
-      info('Tip: `loginctl enable-linger $USER` lets the service keep running when logged out.')
-    } else {
-      warn('systemctl start failed — check `systemctl --user status claudeclaw.service`.')
-    }
-  } catch (err) {
-    warn(`systemctl error: ${(err as Error).message}`)
-  }
-}
-
-async function captureChatId(rl: readline.Interface): Promise<void> {
-  header('Get your Chat ID')
-  info('Open Telegram and send /chatid to your bot. The bot will echo your chat ID back.')
-  info('Paste it here and I\'ll save it to .env as ALLOWED_CHAT_ID so only you can use the bot.')
-  const chatId = (await rl.question('ALLOWED_CHAT_ID (or leave blank to skip): ')).trim()
-  if (!chatId) {
-    warn('Skipped. The bot will accept ANY chat until ALLOWED_CHAT_ID is set in .env.')
-    return
-  }
-  if (!/^-?\d+$/.test(chatId)) {
-    warn(`That does not look like a Telegram chat ID (expected digits, maybe negative). Saved anyway.`)
-  }
-  writeEnv({ ALLOWED_CHAT_ID: chatId })
-  ok(`ALLOWED_CHAT_ID saved to .env`)
-
-  const platform = process.platform
-  if (platform === 'darwin') {
-    spawnSync('launchctl', ['unload', path.join(os.homedir(), 'Library/LaunchAgents/com.claudeclaw.app.plist')], { stdio: 'ignore' })
-    spawnSync('launchctl', ['load', path.join(os.homedir(), 'Library/LaunchAgents/com.claudeclaw.app.plist')], { stdio: 'inherit' })
-    ok('Service reloaded with new chat ID.')
-  } else if (platform === 'linux') {
-    spawnSync('systemctl', ['--user', 'restart', 'claudeclaw.service'], { stdio: 'inherit' })
-    ok('Service restarted with new chat ID.')
-  }
+  s.stop('Build complete')
 }
 
 async function main(): Promise<void> {
-  process.stdout.write(BANNER + '\n')
-  process.stdout.write(`${C.dim}Setup wizard — about 5 minutes.${C.reset}\n`)
+  intro('ClaudeOS setup wizard')
 
   await checkRequirements()
-
-  const rl = readline.createInterface({ input, output })
-  try {
-    await collectConfig(rl)
-    await personaliseClaudeMd(rl)
-    installService()
-    await captureChatId(rl)
-
-    header('Done')
-    ok(`ClaudeClaw is installed at ${PROJECT_ROOT}`)
-    info('Quick reference:')
-    info('  npm run start          — run in foreground (dev)')
-    info('  npm run status         — check health')
-    info('  npm run schedule list  — manage scheduled tasks')
-    info(`  Logs                   — /tmp/claudeclaw.log`)
-    info('  Message your bot on Telegram and say hi.')
-  } finally {
-    rl.close()
+  const existing = readEnv()
+  if (Object.keys(existing).length) {
+    log.info(`Found existing .env with ${Object.keys(existing).length} keys — values below are pre-filled.`)
   }
+
+  const token = await sectionTelegram(existing)
+  const chatIds = await sectionAuthorization(existing)
+  const groq = await sectionSTT(existing)
+  const tts = await sectionTTS(existing)
+
+  const envOut: EnvMap = {
+    TELEGRAM_BOT_TOKEN: token,
+    ALLOWED_CHAT_IDS: chatIds,
+    LOG_LEVEL: existing['LOG_LEVEL'] ?? 'info',
+    NODE_ENV: existing['NODE_ENV'] ?? 'production',
+  }
+  if (groq) envOut['GROQ_API_KEY'] = groq
+  if (tts) {
+    envOut['ELEVENLABS_API_KEY'] = tts.apiKey
+    envOut['ELEVENLABS_VOICE_ID'] = tts.voiceId
+    envOut['ELEVENLABS_MODEL_ID'] = tts.modelId
+    envOut['TTS_MAX_CHARS'] = tts.maxChars
+  }
+
+  writeEnv(envOut)
+  log.success('.env saved (chmod 600)')
+
+  await sectionClaudeMd()
+  await sectionBuild()
+
+  outro(
+    [
+      'Done. Next steps:',
+      '  • Start the bot in foreground: npm run start',
+      '  • Or run as a systemd service: re-run install.sh to wire up claudeclaw.service',
+      '  • Message your bot on Telegram and say hi.',
+    ].join('\n'),
+  )
 }
 
-void spawn // keep import for future hot-start hooks
 main().catch((err) => {
-  fail(`Setup failed: ${(err as Error).message}`)
+  log.error(`Setup failed: ${(err as Error).message}`)
   process.exit(1)
 })
