@@ -41,3 +41,17 @@ export function isAuthorised(chatId: number | string): boolean {
   if (ALLOWED_CHAT_IDS.length === 0) return true
   return ALLOWED_CHAT_IDS.includes(String(chatId))
 }
+
+export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'
+export const WHATSAPP_PROVIDER = (env['WHATSAPP_PROVIDER'] ?? 'baileys').trim()
+
+const rawWhatsapp = env['ALLOWED_WHATSAPP_NUMBERS'] ?? ''
+export const ALLOWED_WHATSAPP_NUMBERS: readonly string[] = rawWhatsapp
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+export function isWhatsAppAuthorised(number: string): boolean {
+  if (ALLOWED_WHATSAPP_NUMBERS.length === 0) return true
+  return ALLOWED_WHATSAPP_NUMBERS.includes(number)
+}

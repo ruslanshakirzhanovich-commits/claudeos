@@ -320,6 +320,47 @@ async function sectionTTS(existing: EnvMap): Promise<TtsConfig | null> {
   return { apiKey, voiceId: voiceId.trim(), modelId: modelId as string, maxChars: maxCharsRaw.trim() }
 }
 
+interface WhatsAppConfig {
+  enabled: boolean
+  allowedNumbers: string
+}
+
+async function sectionWhatsApp(existing: EnvMap): Promise<WhatsAppConfig> {
+  note(
+    [
+      'Experimental: bridge the bot into WhatsApp via @whiskeysockets/baileys.',
+      '⚠  Reverse-engineered client — WhatsApp may ban the number. Use a SECONDARY phone.',
+      'On first start you will see a QR in the bot logs — scan it from WhatsApp → Linked devices.',
+    ].join('\n'),
+    'WhatsApp bridge (optional)',
+  )
+
+  const enable = v(
+    await confirm({
+      message: 'Enable WhatsApp bridge?',
+      initialValue: existing['WHATSAPP_ENABLED'] === '1',
+    }),
+  )
+  if (!enable) return { enabled: false, allowedNumbers: existing['ALLOWED_WHATSAPP_NUMBERS'] ?? '' }
+
+  const numbers = v(
+    await text({
+      message: 'ALLOWED_WHATSAPP_NUMBERS (digits only, comma-separated, blank = allow any)',
+      placeholder: '491234567,15551234567',
+      initialValue: existing['ALLOWED_WHATSAPP_NUMBERS'] ?? '',
+      validate: (s) => {
+        const t = s.trim()
+        if (!t) return undefined
+        for (const n of t.split(',').map((x) => x.trim()).filter(Boolean)) {
+          if (!/^\d+$/.test(n)) return `"${n}" is not digits-only.`
+        }
+        return undefined
+      },
+    }),
+  )
+  return { enabled: true, allowedNumbers: numbers.trim() }
+}
+
 async function sectionClaudeMd(): Promise<void> {
   const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md')
   if (!fs.existsSync(claudeMd)) return
@@ -373,6 +414,7 @@ async function main(): Promise<void> {
   const chatIds = await sectionAuthorization(existing)
   const groq = await sectionSTT(existing)
   const tts = await sectionTTS(existing)
+  const whatsapp = await sectionWhatsApp(existing)
 
   const envOut: EnvMap = {
     TELEGRAM_BOT_TOKEN: token,
@@ -387,6 +429,9 @@ async function main(): Promise<void> {
     envOut['ELEVENLABS_MODEL_ID'] = tts.modelId
     envOut['TTS_MAX_CHARS'] = tts.maxChars
   }
+  envOut['WHATSAPP_ENABLED'] = whatsapp.enabled ? '1' : ''
+  envOut['WHATSAPP_PROVIDER'] = existing['WHATSAPP_PROVIDER'] ?? 'baileys'
+  envOut['ALLOWED_WHATSAPP_NUMBERS'] = whatsapp.allowedNumbers
 
   writeEnv(envOut)
   log.success('.env saved (chmod 600)')

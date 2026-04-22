@@ -7,6 +7,7 @@ import { createBot, sendToChat } from './bot.js'
 import { runDecaySweep } from './memory.js'
 import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
+import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
 
 const BANNER = `
  ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗
@@ -91,6 +92,8 @@ async function main(): Promise<void> {
   const bot = createBot()
   const schedulerTimer = initScheduler(async (chatId, text) => sendToChat(chatId, text))
 
+  initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
+
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'shutting down')
     clearInterval(decayTimer)
@@ -100,6 +103,7 @@ async function main(): Promise<void> {
     } catch {
       /* ignore */
     }
+    await stopWhatsApp()
     releaseLock()
     process.exit(0)
   }
