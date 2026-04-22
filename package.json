@@ -21,6 +21,7 @@
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "better-sqlite3": "^11.3.0",
     "cron-parser": "^4.9.0",
+    "dotenv": "^17.4.2",
     "grammy": "^1.30.0",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
