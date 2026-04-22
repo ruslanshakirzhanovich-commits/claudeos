@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
+import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, ADMIN_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
 import { initDatabase, seedAllowedChatsFromEnv } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
@@ -9,6 +9,9 @@ import { runDecaySweep } from './memory.js'
 import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
 import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
+import { waitForInflight, inflightCount } from './inflight.js'
+
+const INFLIGHT_DRAIN_TIMEOUT_MS = 30_000
 
 const BANNER = `
  ██████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗
@@ -100,8 +103,11 @@ async function main(): Promise<void> {
 
   const previewServer = PREVIEW_ENABLED ? createPreviewServer(PREVIEW_PORT) : null
 
+  let shuttingDown = false
   const shutdown = async (signal: string) => {
-    logger.info({ signal }, 'shutting down')
+    if (shuttingDown) return
+    shuttingDown = true
+    logger.info({ signal, inflight: inflightCount() }, 'shutting down')
     clearInterval(decayTimer)
     clearInterval(schedulerTimer)
     try {
@@ -110,17 +116,34 @@ async function main(): Promise<void> {
       /* ignore */
     }
     await stopWhatsApp()
+    const remaining = await waitForInflight(INFLIGHT_DRAIN_TIMEOUT_MS)
+    if (remaining > 0) {
+      logger.warn({ remaining }, 'exiting with inflight work still running')
+    }
     if (previewServer) previewServer.close()
     releaseLock()
     process.exit(0)
   }
   process.on('SIGINT', () => void shutdown('SIGINT'))
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
+
+  const notifyAdminsOnCrash = async (err: unknown, kind: string) => {
+    for (const adminId of ADMIN_CHAT_IDS) {
+      try {
+        const msg = (err as Error)?.stack ?? (err as Error)?.message ?? String(err)
+        await sendToChat(adminId, `⚠️ ${kind}\n\n<pre>${msg.slice(0, 3000)}</pre>`)
+      } catch {
+        /* ignore — alert is best-effort */
+      }
+    }
+  }
   process.on('uncaughtException', (err) => {
     logger.error({ err }, 'uncaughtException')
+    void notifyAdminsOnCrash(err, 'uncaughtException')
   })
   process.on('unhandledRejection', (err) => {
     logger.error({ err }, 'unhandledRejection')
+    void notifyAdminsOnCrash(err, 'unhandledRejection')
   })
 
   try {

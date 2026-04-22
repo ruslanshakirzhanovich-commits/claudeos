@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { PROJECT_ROOT, CLAUDE_MD_PATH } from './config.js'
 import { logger, type Logger } from './logger.js'
+import { trackInflight } from './inflight.js'
 
 export interface AgentResult {
   text: string | null
@@ -39,6 +40,13 @@ function wrapWithClaudeMd(userMessage: string): string {
 export async function runAgent(
   message: string,
   opts: RunAgentOptions = {},
+): Promise<AgentResult> {
+  return trackInflight(runAgentInner(message, opts))
+}
+
+async function runAgentInner(
+  message: string,
+  opts: RunAgentOptions,
 ): Promise<AgentResult> {
   const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger } = opts
   const wrapped = wrapWithClaudeMd(message)
