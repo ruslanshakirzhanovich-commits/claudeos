@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
 import { initDatabase, seedAllowedChatsFromEnv } from './db.js'
-import { createPreviewServer } from './preview-server.js'
+import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
 import { runDecaySweep } from './memory.js'
@@ -91,6 +91,7 @@ async function main(): Promise<void> {
   const decayTimer = setInterval(runDecaySweep, DECAY_INTERVAL_MS)
 
   cleanupOldUploads()
+  cleanupOldPreviews()
 
   const bot = createBot()
   const schedulerTimer = initScheduler(async (chatId, text) => sendToChat(chatId, text))

@@ -31,6 +31,29 @@ function ensurePreviewsDir(): void {
   if (!fs.existsSync(PREVIEWS_DIR)) fs.mkdirSync(PREVIEWS_DIR, { recursive: true })
 }
 
+export function cleanupOldPreviews(maxAgeMs: number = 30 * 24 * 60 * 60 * 1000): void {
+  try {
+    if (!fs.existsSync(PREVIEWS_DIR)) return
+    const now = Date.now()
+    let removed = 0
+    for (const entry of fs.readdirSync(PREVIEWS_DIR)) {
+      const full = path.join(PREVIEWS_DIR, entry)
+      try {
+        const stat = fs.statSync(full)
+        if (now - stat.mtimeMs > maxAgeMs) {
+          fs.rmSync(full, { recursive: true, force: true })
+          removed++
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (removed > 0) logger.info({ removed }, 'cleanupOldPreviews removed stale preview dirs')
+  } catch (err) {
+    logger.warn({ err }, 'cleanupOldPreviews failed')
+  }
+}
+
 function sendStatus(res: http.ServerResponse, code: number, body: string): void {
   res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' })
   res.end(body)
