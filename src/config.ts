@@ -23,6 +23,14 @@ const env = readEnvFile()
 export const TELEGRAM_BOT_TOKEN = env['TELEGRAM_BOT_TOKEN'] ?? ''
 export const GROQ_API_KEY = env['GROQ_API_KEY'] ?? ''
 
+export const ELEVENLABS_API_KEY = env['ELEVENLABS_API_KEY'] ?? ''
+export const ELEVENLABS_VOICE_ID = env['ELEVENLABS_VOICE_ID'] ?? ''
+export const ELEVENLABS_MODEL_ID = env['ELEVENLABS_MODEL_ID'] ?? 'eleven_multilingual_v2'
+export const TTS_MAX_CHARS = Math.max(
+  50,
+  Number(env['TTS_MAX_CHARS'] ?? '800') || 800,
+)
+
 const rawAllowed = env['ALLOWED_CHAT_IDS'] ?? env['ALLOWED_CHAT_ID'] ?? ''
 export const ALLOWED_CHAT_IDS: readonly string[] = rawAllowed
   .split(',')

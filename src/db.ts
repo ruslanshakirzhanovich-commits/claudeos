@@ -74,7 +74,28 @@ export function initDatabase(): void {
 
     CREATE INDEX IF NOT EXISTS idx_tasks_due
       ON scheduled_tasks(status, next_run);
+
+    CREATE TABLE IF NOT EXISTS chat_preferences (
+      chat_id TEXT PRIMARY KEY,
+      tts_enabled INTEGER NOT NULL DEFAULT 0
+    );
   `)
+}
+
+export function getTtsEnabled(chatId: string): boolean {
+  const row = getDb()
+    .prepare('SELECT tts_enabled FROM chat_preferences WHERE chat_id = ?')
+    .get(chatId) as { tts_enabled: number } | undefined
+  return row?.tts_enabled === 1
+}
+
+export function setTtsEnabled(chatId: string, enabled: boolean): void {
+  getDb()
+    .prepare(
+      `INSERT INTO chat_preferences (chat_id, tts_enabled) VALUES (?, ?)
+       ON CONFLICT(chat_id) DO UPDATE SET tts_enabled = excluded.tts_enabled`,
+    )
+    .run(chatId, enabled ? 1 : 0)
 }
 
 export interface SessionRow {

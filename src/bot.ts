@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { Bot, type Context, GrammyError, HttpError } from 'grammy'
+import { Bot, type Context, GrammyError, HttpError, InputFile } from 'grammy'
 import {
   TELEGRAM_BOT_TOKEN,
   ALLOWED_CHAT_IDS,
@@ -9,9 +9,20 @@ import {
   isAuthorised,
 } from './config.js'
 import { runAgent } from './agent.js'
-import { getSession, setSession, clearSession, countMemories } from './db.js'
+import {
+  getSession,
+  setSession,
+  clearSession,
+  countMemories,
+  getTtsEnabled,
+  setTtsEnabled,
+} from './db.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
-import { transcribeAudio, voiceCapabilities } from './voice.js'
+import {
+  transcribeAudio,
+  voiceCapabilities,
+  synthesizeSpeech,
+} from './voice.js'
 import {
   downloadMedia,
   buildPhotoMessage,
@@ -141,7 +152,11 @@ function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined
   }
 }
 
-async function handleMessage(ctx: Context, rawText: string): Promise<void> {
+async function handleMessage(
+  ctx: Context,
+  rawText: string,
+  opts: { forceVoice?: boolean } = {},
+): Promise<void> {
   const { chatId, userId, username } = ctxIdentity(ctx)
   if (!chatId) return
   const log = logger.child({ chatId, userId, username })
@@ -171,7 +186,25 @@ async function handleMessage(ctx: Context, rawText: string): Promise<void> {
 
     if (text) await saveConversationTurn(chatId, rawText, text)
 
-    await sendResponse(ctx, text ?? '(no output)')
+    const replyText = text ?? '(no output)'
+    const wantVoice =
+      (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
+
+    if (wantVoice && text) {
+      try {
+        await ctx.replyWithChatAction('record_voice').catch(() => {})
+        const { audio, truncated } = await synthesizeSpeech(text)
+        await ctx.replyWithVoice(new InputFile(audio, 'voice.ogg'))
+        if (truncated) {
+          await sendResponse(ctx, text)
+        }
+      } catch (err) {
+        log.warn({ err }, 'TTS failed, falling back to text')
+        await sendResponse(ctx, replyText)
+      }
+    } else {
+      await sendResponse(ctx, replyText)
+    }
   } catch (err) {
     log.error({ err }, 'handleMessage failed')
     const msg = err instanceof Error ? err.message : String(err)
@@ -216,6 +249,37 @@ export function createBot(): Bot {
     if (!isAuthorised(chatId)) return
     const total = countMemories(chatId)
     await ctx.reply(`Stored memories for this chat: ${total}`)
+  })
+
+  bot.command('voice', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) return
+    const caps = voiceCapabilities()
+    const arg = (ctx.message?.text ?? '').split(/\s+/)[1]?.toLowerCase() ?? 'status'
+
+    if (arg === 'on') {
+      if (!caps.tts) {
+        await ctx.reply(
+          'TTS not configured. Set ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID in .env.',
+        )
+        return
+      }
+      setTtsEnabled(chatId, true)
+      await ctx.reply('Voice replies: ON')
+      return
+    }
+    if (arg === 'off') {
+      setTtsEnabled(chatId, false)
+      await ctx.reply('Voice replies: OFF')
+      return
+    }
+    const enabled = getTtsEnabled(chatId)
+    const lines = [
+      `Voice replies: ${enabled ? 'ON' : 'OFF'}`,
+      `TTS available: ${caps.tts ? 'yes' : 'no (ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID missing)'}`,
+      'Usage: /voice on | /voice off | /voice status',
+    ]
+    await ctx.reply(lines.join('\n'))
   })
 
   bot.command('version', async (ctx) => {
@@ -270,7 +334,9 @@ export function createBot(): Bot {
         return
       }
       await ctx.reply(`Heard: "${transcript.slice(0, 200)}"`).catch(() => {})
-      await handleMessage(ctx, `[Voice transcribed]: ${transcript}`)
+      await handleMessage(ctx, `[Voice transcribed]: ${transcript}`, {
+        forceVoice: true,
+      })
     } catch (err) {
       log.error({ err }, 'voice handler failed')
       await ctx.reply(`Voice error: ${(err as Error).message}`).catch(() => {})
