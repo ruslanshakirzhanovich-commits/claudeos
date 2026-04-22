@@ -138,6 +138,19 @@ async function sectionTelegram(existing: EnvMap): Promise<string> {
     'Telegram bot',
   )
 
+  if (existing['TELEGRAM_BOT_TOKEN']) {
+    const s = spinner()
+    s.start('Validating existing TELEGRAM_BOT_TOKEN')
+    try {
+      const username = await verifyTelegramToken(existing['TELEGRAM_BOT_TOKEN'])
+      s.stop(`Existing token still works (bot @${username}) — skipping Telegram section`)
+      return existing['TELEGRAM_BOT_TOKEN']
+    } catch (err) {
+      s.stop(`Existing token no longer valid: ${(err as Error).message}`, 1)
+      log.warn('The token in .env was revoked or is invalid. Enter a new one from @BotFather.')
+    }
+  }
+
   while (true) {
     const token = v(
       await password({
