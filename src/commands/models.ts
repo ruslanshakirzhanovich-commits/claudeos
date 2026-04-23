@@ -18,6 +18,12 @@ export const MODELS: ModelEntry[] = [
     blurb: 'Most capable, highest cost. Best for complex reasoning and long-form coding.',
   },
   {
+    id: 'claude-opus-4-6',
+    aliases: ['opus-4.6'],
+    name: 'Claude Opus 4.6',
+    blurb: 'Previous Opus generation. Use when you want to pin to the pre-4.7 behavior.',
+  },
+  {
     id: 'claude-sonnet-4-6',
     aliases: ['sonnet', 'sonnet-4.6'],
     name: 'Claude Sonnet 4.6',
