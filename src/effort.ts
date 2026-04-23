@@ -1,15 +1,21 @@
+import { CLAUDE_DEFAULT_EFFORT } from './config.js'
+
 export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh'
 
 export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh']
 
-// Default reasoning budget for Telegram/WhatsApp chat handlers. Scheduler
-// tasks and other callers that pass no `effort` inherit from the Claude CLI
-// settings file instead (typically xhigh for the admin user).
-export const CHAT_DEFAULT_EFFORT: EffortLevel = 'medium'
-
 export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value)
 }
+
+// Default reasoning budget for Telegram/WhatsApp chat handlers. Scheduler
+// tasks and other callers that pass no `effort` inherit from the Claude CLI
+// settings file instead (typically xhigh for the admin user).
+// Override via CLAUDE_DEFAULT_EFFORT env (low|medium|high|xhigh). Invalid
+// values fall back to medium.
+export const CHAT_DEFAULT_EFFORT: EffortLevel = isEffortLevel(CLAUDE_DEFAULT_EFFORT)
+  ? CLAUDE_DEFAULT_EFFORT
+  : 'medium'
 
 export function effortToThinkingTokens(level: EffortLevel): number {
   switch (level) {

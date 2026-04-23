@@ -55,6 +55,7 @@ export function isAdmin(chatId: number | string): boolean {
 }
 
 export const CLAUDE_MODEL = (env['CLAUDE_MODEL'] ?? '').trim()
+export const CLAUDE_DEFAULT_EFFORT = (env['CLAUDE_DEFAULT_EFFORT'] ?? '').trim().toLowerCase()
 
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
