@@ -1,4 +1,10 @@
-import { CLAUDE_DEFAULT_EFFORT } from './config.js'
+import {
+  CLAUDE_DEFAULT_EFFORT,
+  EFFORT_TOKENS_LOW,
+  EFFORT_TOKENS_MEDIUM,
+  EFFORT_TOKENS_HIGH,
+  EFFORT_TOKENS_XHIGH,
+} from './config.js'
 
 export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh'
 
@@ -17,16 +23,20 @@ export const CHAT_DEFAULT_EFFORT: EffortLevel = isEffortLevel(CLAUDE_DEFAULT_EFF
   ? CLAUDE_DEFAULT_EFFORT
   : 'medium'
 
+// Thinking-token budgets per effort tier. Defaults chosen as a 4× ladder
+// (2k → 8k → 24k → 64k) to give a perceptible quality/latency step between
+// adjacent levels without overshooting common context windows. Override via
+// the EFFORT_TOKENS_* env vars in config.ts.
 export function effortToThinkingTokens(level: EffortLevel): number {
   switch (level) {
     case 'low':
-      return 2_048
+      return EFFORT_TOKENS_LOW
     case 'medium':
-      return 8_192
+      return EFFORT_TOKENS_MEDIUM
     case 'high':
-      return 24_576
+      return EFFORT_TOKENS_HIGH
     case 'xhigh':
-      return 65_536
+      return EFFORT_TOKENS_XHIGH
   }
 }
 

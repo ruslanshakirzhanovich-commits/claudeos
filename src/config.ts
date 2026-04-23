@@ -57,6 +57,21 @@ export function isAdmin(chatId: number | string): boolean {
 export const CLAUDE_MODEL = (env['CLAUDE_MODEL'] ?? '').trim()
 export const CLAUDE_DEFAULT_EFFORT = (env['CLAUDE_DEFAULT_EFFORT'] ?? '').trim().toLowerCase()
 
+// Override the default thinking-token budgets for low/medium/high/xhigh.
+// Anthropic does not publish canonical numbers for an "effort" tier system —
+// these defaults are heuristic and chosen to span 4× steps from a quick reply
+// up to a deep reasoning pass. Power users can tune them without rebuilding.
+function readPositiveInt(name: string, fallback: number): number {
+  const raw = (env[name] ?? '').trim()
+  if (!raw) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+export const EFFORT_TOKENS_LOW = readPositiveInt('EFFORT_TOKENS_LOW', 2_048)
+export const EFFORT_TOKENS_MEDIUM = readPositiveInt('EFFORT_TOKENS_MEDIUM', 8_192)
+export const EFFORT_TOKENS_HIGH = readPositiveInt('EFFORT_TOKENS_HIGH', 24_576)
+export const EFFORT_TOKENS_XHIGH = readPositiveInt('EFFORT_TOKENS_XHIGH', 65_536)
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)
