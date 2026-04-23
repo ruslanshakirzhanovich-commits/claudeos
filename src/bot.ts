@@ -1,10 +1,8 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { Bot, type Context, GrammyError, HttpError, InputFile } from 'grammy'
 import {
   TELEGRAM_BOT_TOKEN,
   TYPING_REFRESH_MS,
-  STORE_DIR,
   isAdmin,
 } from './config.js'
 import { formatForTelegram, splitMessage } from './format.js'
@@ -12,6 +10,7 @@ import { registerVersion } from './commands/version.js'
 import { registerVoice } from './commands/voice.js'
 import { registerPing, registerStats } from './commands/stats.js'
 import { registerUserCommands } from './commands/users.js'
+import { registerBackup } from './commands/backup.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -30,7 +29,6 @@ import {
   touchAllowedChat,
   getSchemaVersion,
 } from './db.js'
-import { createAndVerifyBackup } from './backup.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
   transcribeAudio,
@@ -203,41 +201,7 @@ export function createBot(): Bot {
   registerPing(bot)
   registerStats(bot)
 
-  bot.command('backup', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
-    try {
-      let result
-      try {
-        result = createAndVerifyBackup()
-      } catch (err) {
-        await ctx.reply(`Backup failed verification: ${(err as Error).message.slice(0, 200)}`)
-        return
-      }
-      const { path: destPath, sizeBytes, verification: v } = result
-      const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2)
-      const verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
-      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}`, { parse_mode: 'HTML' })
-
-      const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
-      if (sizeBytes <= TELEGRAM_FILE_LIMIT) {
-        try {
-          await ctx.replyWithDocument(new InputFile(destPath))
-        } catch (err) {
-          logger.warn({ err }, 'backup upload to Telegram failed')
-          await ctx.reply('(Backup saved locally but upload to Telegram failed — file is on the server.)')
-        }
-      } else {
-        await ctx.reply(`(File >${TELEGRAM_FILE_LIMIT / 1024 / 1024}MB — not uploading to Telegram. Grab from server.)`)
-      }
-    } catch (err) {
-      logger.error({ err }, 'backup failed')
-      await ctx.reply(`Backup failed: ${(err as Error).message.slice(0, 200)}`)
-    }
-  })
+  registerBackup(bot)
 
   registerVoice(bot)
 
@@ -366,5 +330,3 @@ export async function sendToChat(chatId: string, text: string): Promise<void> {
   }
 }
 
-// Silence unused-file warning on fs import in some setups
-void fs
