@@ -24,6 +24,7 @@ import { initScheduler } from './scheduler.js'
 import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
+import { recordCrash } from './metrics.js'
 
 const INFLIGHT_DRAIN_TIMEOUT_MS = 30_000
 
@@ -169,10 +170,12 @@ async function main(): Promise<void> {
   }
   process.on('uncaughtException', (err) => {
     logger.error({ err }, 'uncaughtException')
+    recordCrash('uncaughtException', err)
     void notifyAdminsOnCrash(err, 'uncaughtException')
   })
   process.on('unhandledRejection', (err) => {
     logger.error({ err }, 'unhandledRejection')
+    recordCrash('unhandledRejection', err)
     void notifyAdminsOnCrash(err, 'unhandledRejection')
   })
 

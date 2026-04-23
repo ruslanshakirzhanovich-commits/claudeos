@@ -4,6 +4,7 @@ import { getDueTasks, updateTaskAfterRun, createTask, type ScheduledTask } from 
 import { runAgent } from './agent.js'
 import { logger } from './logger.js'
 import { SCHEDULER_POLL_MS } from './config.js'
+import { recordEvent } from './metrics.js'
 
 const { parseExpression } = (cronParser as any).default ?? cronParser
 
@@ -107,7 +108,10 @@ export function initScheduler(send: Sender): NodeJS.Timeout {
   logger.info('scheduler started')
   const tick = nonOverlapping(
     () => runDueTasks(send),
-    () => logger.debug('scheduler tick skipped — previous run still in flight'),
+    () => {
+      recordEvent('scheduler_skip')
+      logger.debug('scheduler tick skipped — previous run still in flight')
+    },
   )
   return setInterval(tick, SCHEDULER_POLL_MS)
 }

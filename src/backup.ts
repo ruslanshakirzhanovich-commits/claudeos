@@ -3,6 +3,7 @@ import path from 'node:path'
 import { STORE_DIR } from './config.js'
 import { backupDatabase, verifyBackup, type BackupVerification } from './db.js'
 import { logger } from './logger.js'
+import { recordEvent } from './metrics.js'
 
 const BACKUPS_SUBDIR = 'backups'
 const BACKUP_FILENAME_RE = /^claudeclaw-[\dT:\-]+\.db$/
@@ -55,6 +56,7 @@ export function initBackupSchedule(intervalHours: number, keep: number): NodeJS.
     try {
       const result = createAndVerifyBackup()
       const removed = rotateBackups(keep)
+      recordEvent('backup_ok')
       logger.info(
         {
           path: result.path,
@@ -66,6 +68,7 @@ export function initBackupSchedule(intervalHours: number, keep: number): NodeJS.
         'scheduled backup ok',
       )
     } catch (err) {
+      recordEvent('backup_fail')
       logger.error({ err }, 'scheduled backup FAILED')
     }
   }

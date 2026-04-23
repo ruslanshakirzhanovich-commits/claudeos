@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { PROJECT_ROOT, CLAUDE_MD_PATH } from './config.js'
 import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
+import { recordEvent } from './metrics.js'
 
 export interface AgentResult {
   text: string | null
@@ -76,10 +77,12 @@ async function runAgentInner(
     }
   } catch (err) {
     log.error({ err }, 'runAgent failed')
+    recordEvent('agent_error')
     throw err
   } finally {
     if (typingTimer) clearInterval(typingTimer)
   }
 
+  recordEvent('agent_success')
   return { text, newSessionId }
 }

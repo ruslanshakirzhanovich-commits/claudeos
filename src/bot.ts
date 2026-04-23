@@ -11,6 +11,7 @@ import { registerVoice } from './commands/voice.js'
 import { registerPing, registerStats } from './commands/stats.js'
 import { registerUserCommands } from './commands/users.js'
 import { registerBackup } from './commands/backup.js'
+import { registerHealth } from './commands/health.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -200,6 +201,7 @@ export function createBot(): Bot {
 
   registerPing(bot)
   registerStats(bot)
+  registerHealth(bot)
 
   registerBackup(bot)
 
