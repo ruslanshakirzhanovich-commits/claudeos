@@ -13,7 +13,7 @@ const BASE_COMMANDS: BotCommand[] = [
   { command: 'effort', description: 'Switch thinking budget (Low/Medium/High/Extra high)' },
   { command: 'voice', description: 'Toggle voice replies (TTS)' },
   { command: 'memory', description: 'Stored memory count for this chat' },
-  { command: 'newchat', description: 'Reset conversation session' },
+  { command: 'newchat', description: 'Reset session (long-term memories preserved)' },
   { command: 'version', description: 'Show bot version and changelog' },
   { command: 'ping', description: 'Check bot is alive' },
   { command: 'chatid', description: 'Show this chat id' },

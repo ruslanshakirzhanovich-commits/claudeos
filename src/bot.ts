@@ -197,7 +197,11 @@ export function createBot(): Bot {
     if (!isAuthorised(chatId)) return
     clearSession(chatId)
     resetUsage(chatId)
-    await ctx.reply('Session cleared. Starting fresh.')
+    await ctx.reply(
+      'Session cleared. Starting fresh.\n\n' +
+      'Note: long-term memory (facts the bot stored about you) is preserved. ' +
+      'To wipe everything including memories, ask an admin to /removeuser then /adduser you again.',
+    )
   })
 
   bot.command('memory', async (ctx) => {
