@@ -1,7 +1,7 @@
 import type { Bot } from 'grammy'
 import { isAdmin, isWhatsAppAuthorised, CLAUDE_MODEL, PREVIEW_ENABLED, WHATSAPP_ENABLED, WHATSAPP_PROVIDER } from '../config.js'
 import { isAuthorised, isOpenMode, getSession, getTtsEnabled, countMemories, getPreferredModel, getEffortLevel } from '../db.js'
-import { isEffortLevel, effortLabel } from '../effort.js'
+import { isEffortLevel, effortLabel, CHAT_DEFAULT_EFFORT } from '../effort.js'
 import { voiceCapabilities } from '../voice.js'
 import { resolveActiveModel } from './models.js'
 
@@ -41,7 +41,7 @@ export function registerStatus(bot: Bot): void {
       '<b>Model</b>',
       `active: <code>${modelId}</code>`,
       `source: ${modelSource}`,
-      `effort: ${effort ? effortLabel(effort) + ' (/effort)' : 'bot default'}`,
+      `effort: ${effort ? effortLabel(effort) + ' (/effort)' : effortLabel(CHAT_DEFAULT_EFFORT) + ' (bot default)'}`,
       '',
       '<b>Conversation</b>',
       `session: ${sessionId ? `<code>${sessionId.slice(0, 8)}…</code>` : '(new session on next message)'}`,

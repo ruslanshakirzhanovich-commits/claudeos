@@ -6,6 +6,7 @@ import {
   effortLabel,
   effortDescription,
   isEffortLevel,
+  CHAT_DEFAULT_EFFORT,
   type EffortLevel,
 } from '../effort.js'
 
@@ -18,12 +19,15 @@ function buildKeyboard(active: EffortLevel | null): InlineKeyboard {
     const label = active === level ? `✓ ${effortLabel(level)}` : effortLabel(level)
     kb.text(label, `${CALLBACK_PREFIX}${level}`).row()
   }
-  kb.text(active === null ? '✓ Use bot default' : 'Use bot default', `${CALLBACK_PREFIX}${DEFAULT_CHOICE}`)
+  const defaultLabel = `Use bot default (${effortLabel(CHAT_DEFAULT_EFFORT)})`
+  kb.text(active === null ? `✓ ${defaultLabel}` : defaultLabel, `${CALLBACK_PREFIX}${DEFAULT_CHOICE}`)
   return kb
 }
 
 function describeActive(active: EffortLevel | null): string {
-  if (active === null) return '<i>bot default</i> (inherits from ~/.claude/settings.json)'
+  if (active === null) {
+    return `<b>${effortLabel(CHAT_DEFAULT_EFFORT)}</b> (bot default) — ${effortDescription(CHAT_DEFAULT_EFFORT)}`
+  }
   return `<b>${effortLabel(active)}</b> — ${effortDescription(active)}`
 }
 

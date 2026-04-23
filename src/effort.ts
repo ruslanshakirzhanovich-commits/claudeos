@@ -2,6 +2,11 @@ export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh'
 
 export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh']
 
+// Default reasoning budget for Telegram/WhatsApp chat handlers. Scheduler
+// tasks and other callers that pass no `effort` inherit from the Claude CLI
+// settings file instead (typically xhigh for the admin user).
+export const CHAT_DEFAULT_EFFORT: EffortLevel = 'medium'
+
 export function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value)
 }

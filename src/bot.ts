@@ -51,6 +51,7 @@ import {
 import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { wrapUntrusted } from './untrusted.js'
+import { CHAT_DEFAULT_EFFORT, isEffortLevel } from './effort.js'
 
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
@@ -132,7 +133,8 @@ async function handleMessage(
     const sessionId = getSession(chatId) ?? undefined
     const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
     const model = getPreferredModel(chatId) ?? undefined
-    const effort = getEffortLevel(chatId) ?? undefined
+    const storedEffort = getEffortLevel(chatId)
+    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
     const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model, effort })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)

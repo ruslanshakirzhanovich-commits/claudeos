@@ -1,9 +1,10 @@
 import { isWhatsAppAuthorised } from '../config.js'
 import { runAgent } from '../agent.js'
-import { getSession, setSession } from '../db.js'
+import { getSession, setSession, getEffortLevel, getPreferredModel } from '../db.js'
 import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
+import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
 import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -32,9 +33,12 @@ export async function handleWhatsAppMessage(
     const messageForAgent = memoryContext ? `${memoryContext}\n\n${wrappedText}` : wrappedText
 
     const sessionId = getSession(jid) ?? undefined
+    const model = getPreferredModel(jid) ?? undefined
+    const storedEffort = getEffortLevel(jid)
+    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
     // WhatsApp users are non-admin by design — no ADMIN_WHATSAPP_NUMBERS concept yet.
     // They get `plan` mode: Claude can read/reason, cannot execute shell or edit files.
-    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan', log })
+    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan', log, model, effort })
 
     if (newSessionId && newSessionId !== sessionId) setSession(jid, newSessionId)
 
