@@ -112,6 +112,31 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 5,
+    name: 'chat_preferences.usage_* (cache/context/compactions per last turn)',
+    up: (db) => {
+      const cols = new Set(
+        (db.prepare(`PRAGMA table_info(chat_preferences)`).all() as { name: string }[]).map(
+          (c) => c.name,
+        ),
+      )
+      const additions = [
+        ['usage_input_tokens', 'INTEGER'],
+        ['usage_output_tokens', 'INTEGER'],
+        ['usage_cache_read', 'INTEGER'],
+        ['usage_cache_create', 'INTEGER'],
+        ['usage_context_window', 'INTEGER'],
+        ['usage_compactions', 'INTEGER NOT NULL DEFAULT 0'],
+        ['usage_updated_at', 'INTEGER'],
+      ]
+      for (const [name, type] of additions) {
+        if (!cols.has(name)) {
+          db.exec(`ALTER TABLE chat_preferences ADD COLUMN ${name} ${type}`)
+        }
+      }
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {

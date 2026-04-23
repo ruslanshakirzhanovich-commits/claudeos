@@ -1,11 +1,41 @@
-import { beforeEach, describe, it, expect } from 'vitest'
-import { recordUsage, recordCompaction, resetUsage, getUsage } from '../src/usage.js'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { afterAll, beforeEach, describe, it, expect, vi } from 'vitest'
 
-const CHAT = 'test-chat-usage-9999'
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-usage-test-'))
+const dbFile = path.join(tmpDir, 'claudeclaw.db')
+
+vi.mock('../src/config.js', () => ({
+  DB_PATH: dbFile,
+  STORE_DIR: tmpDir,
+}))
+vi.mock('../src/logger.js', () => ({
+  logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+}))
+
+const { initDatabase } = await import('../src/db.js')
+const { recordUsage, recordCompaction, resetUsage, getUsage } = await import('../src/usage.js')
+
+initDatabase()
+
+const CHAT = 'test-chat-usage'
 
 beforeEach(() => resetUsage(CHAT))
 
-describe('usage tracker', () => {
+afterAll(() => {
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+})
+
+describe('usage tracker (DB-backed)', () => {
+  it('returns null before any turn is recorded', () => {
+    expect(getUsage(CHAT)).toBeNull()
+  })
+
   it('stores the most recent turn with cache + context numbers', () => {
     recordUsage(CHAT, {
       inputTokens: 1000,
@@ -35,12 +65,13 @@ describe('usage tracker', () => {
     expect(getUsage(CHAT)!.compactions).toBe(2)
   })
 
-  it('recordCompaction creates a zeroed row when no usage has been recorded yet', () => {
+  it('recordCompaction works before any usage has been recorded', () => {
     recordCompaction(CHAT)
-    const u = getUsage(CHAT)!
-    expect(u.compactions).toBe(1)
-    expect(u.inputTokens).toBe(0)
-    expect(u.cacheReadTokens).toBe(0)
+    const u = getUsage(CHAT)
+    expect(u).not.toBeNull()
+    expect(u!.compactions).toBe(1)
+    expect(u!.inputTokens).toBe(0)
+    expect(u!.cacheReadTokens).toBe(0)
   })
 
   it('resetUsage clears all state for the chat', () => {
