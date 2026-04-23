@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import { PROJECT_ROOT, CLAUDE_MD_PATH } from './config.js'
+import { PROJECT_ROOT, CLAUDE_MD_PATH, CLAUDE_MODEL } from './config.js'
 import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
 import { recordEvent } from './metrics.js'
@@ -64,6 +64,7 @@ async function runAgentInner(
       permissionMode,
     }
     if (sessionId) options['resume'] = sessionId
+    if (CLAUDE_MODEL) options['model'] = CLAUDE_MODEL
 
     const stream = query({ prompt: wrapped, options: options as any })
 

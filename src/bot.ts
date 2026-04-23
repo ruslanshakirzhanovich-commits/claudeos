@@ -13,6 +13,8 @@ import { registerPing, registerStats } from './commands/stats.js'
 import { registerUserCommands } from './commands/users.js'
 import { registerBackup } from './commands/backup.js'
 import { registerHealth } from './commands/health.js'
+import { registerModels } from './commands/models.js'
+import { registerStatus } from './commands/status.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -203,6 +205,8 @@ export function createBot(): Bot {
   registerPing(bot)
   registerStats(bot)
   registerHealth(bot)
+  registerStatus(bot)
+  registerModels(bot)
 
   registerBackup(bot)
 

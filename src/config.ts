@@ -54,6 +54,8 @@ export function isAdmin(chatId: number | string): boolean {
   return isAdminOf(ADMIN_CHAT_IDS, chatId)
 }
 
+export const CLAUDE_MODEL = (env['CLAUDE_MODEL'] ?? '').trim()
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)
