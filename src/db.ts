@@ -102,6 +102,17 @@ export interface BackupVerification {
 export function verifyBackup(backupPath: string): BackupVerification {
   const handle = new BetterSqlite3(backupPath, { readonly: true, fileMustExist: true }) as InstanceType<typeof Database>
   try {
+    const integrityRows = handle.pragma('integrity_check') as Array<{ integrity_check: string }>
+    const integrity = integrityRows.map((r) => r.integrity_check).join('; ')
+    if (integrity !== 'ok') {
+      throw new Error(`integrity_check failed: ${integrity.slice(0, 500)}`)
+    }
+
+    const fkRows = handle.pragma('foreign_key_check') as Array<Record<string, unknown>>
+    if (fkRows.length > 0) {
+      throw new Error(`foreign_key_check found ${fkRows.length} violations`)
+    }
+
     const schemaVersion = handle.pragma('user_version', { simple: true }) as number
     const sessions = (handle.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c
     const memories = (handle.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
