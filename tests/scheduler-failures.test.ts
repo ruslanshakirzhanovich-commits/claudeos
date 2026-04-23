@@ -87,6 +87,20 @@ describe('runDueTasks', () => {
     expect(updateSpy).toHaveBeenCalledWith('t2', expect.any(Number), 'here is the thing')
   })
 
+  it('passes the task chat_id to runAgent so usage attributes to the owning chat', async () => {
+    mockTasks.push(makeTask('t-chatid'))
+    runAgentSpy.mockResolvedValue({ text: 'ok' })
+
+    await runDueTasks(async () => {})
+
+    expect(runAgentSpy).toHaveBeenCalledTimes(1)
+    const opts = runAgentSpy.mock.calls[0]?.[1]
+    expect(opts).toMatchObject({
+      permissionMode: 'bypassPermissions',
+      chatId: '42',
+    })
+  })
+
   it('swallows errors thrown by the sender (network to Telegram flaking) — still updates next_run', async () => {
     mockTasks.push(makeTask('t3'))
     runAgentSpy.mockResolvedValue({ text: 'ok' })
