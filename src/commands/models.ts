@@ -38,8 +38,26 @@ export const MODELS: ModelEntry[] = [
   },
 ]
 
-const CALLBACK_PREFIX = 'model:'
-const DEFAULT_CHOICE = 'default'
+export const MODEL_CALLBACK_PREFIX = 'model:'
+export const MODEL_DEFAULT_CHOICE = 'default'
+
+const CALLBACK_PREFIX = MODEL_CALLBACK_PREFIX
+const DEFAULT_CHOICE = MODEL_DEFAULT_CHOICE
+
+/**
+ * Returns the parsed callback choice if `data` is a model: payload AND the
+ * choice is one we know about. Returns null otherwise. Hardens against
+ * forged callback payloads writing arbitrary strings into preferred_model.
+ */
+export function parseModelCallback(
+  data: string | undefined | null,
+): { choice: string } | null {
+  if (typeof data !== 'string' || !data.startsWith(CALLBACK_PREFIX)) return null
+  const choice = data.slice(CALLBACK_PREFIX.length)
+  if (choice === DEFAULT_CHOICE) return { choice }
+  if (MODELS.some((m) => m.id === choice)) return { choice }
+  return null
+}
 
 export function resolveActiveModel(envValue: string): { id: string; explicit: boolean } {
   if (!envValue) return { id: MODELS[0]!.id, explicit: false }
@@ -83,8 +101,12 @@ export function registerModels(bot: Bot): void {
   })
 
   bot.on('callback_query:data', async (ctx, next) => {
-    const data = ctx.callbackQuery.data
-    if (!data.startsWith(CALLBACK_PREFIX)) {
+    const parsed = parseModelCallback(ctx.callbackQuery.data)
+    if (!parsed) {
+      if (typeof ctx.callbackQuery.data === 'string' && ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)) {
+        await ctx.answerCallbackQuery({ text: 'Unknown model', show_alert: true })
+        return
+      }
       await next()
       return
     }
@@ -93,13 +115,7 @@ export function registerModels(bot: Bot): void {
       await ctx.answerCallbackQuery({ text: 'Not authorised', show_alert: true })
       return
     }
-    const choice = data.slice(CALLBACK_PREFIX.length)
-    const valid =
-      choice === DEFAULT_CHOICE || MODELS.some((m) => m.id === choice)
-    if (!valid) {
-      await ctx.answerCallbackQuery({ text: 'Unknown model', show_alert: true })
-      return
-    }
+    const choice = parsed.choice
     const previous = getPreferredModel(chatId)
     if (choice === DEFAULT_CHOICE) {
       setPreferredModel(chatId, null)

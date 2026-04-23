@@ -10,8 +10,26 @@ import {
   type EffortLevel,
 } from '../effort.js'
 
-const CALLBACK_PREFIX = 'effort:'
-const DEFAULT_CHOICE = 'default'
+export const EFFORT_CALLBACK_PREFIX = 'effort:'
+export const EFFORT_DEFAULT_CHOICE = 'default'
+
+const CALLBACK_PREFIX = EFFORT_CALLBACK_PREFIX
+const DEFAULT_CHOICE = EFFORT_DEFAULT_CHOICE
+
+/**
+ * Parse and validate an effort: callback payload. Returns null if not an
+ * effort: payload OR if the choice is unrecognised. Hardens against forged
+ * payloads writing arbitrary strings into chat_preferences.effort_level.
+ */
+export function parseEffortCallback(
+  data: string | undefined | null,
+): { choice: EffortLevel | typeof DEFAULT_CHOICE } | null {
+  if (typeof data !== 'string' || !data.startsWith(CALLBACK_PREFIX)) return null
+  const choice = data.slice(CALLBACK_PREFIX.length)
+  if (choice === DEFAULT_CHOICE) return { choice: DEFAULT_CHOICE }
+  if (isEffortLevel(choice)) return { choice }
+  return null
+}
 
 function buildKeyboard(active: EffortLevel | null): InlineKeyboard {
   const kb = new InlineKeyboard()
@@ -52,8 +70,12 @@ export function registerEffort(bot: Bot): void {
   })
 
   bot.on('callback_query:data', async (ctx, next) => {
-    const data = ctx.callbackQuery.data
-    if (!data.startsWith(CALLBACK_PREFIX)) {
+    const parsed = parseEffortCallback(ctx.callbackQuery.data)
+    if (!parsed) {
+      if (typeof ctx.callbackQuery.data === 'string' && ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)) {
+        await ctx.answerCallbackQuery({ text: 'Unknown level', show_alert: true })
+        return
+      }
       await next()
       return
     }
@@ -62,16 +84,13 @@ export function registerEffort(bot: Bot): void {
       await ctx.answerCallbackQuery({ text: 'Not authorised', show_alert: true })
       return
     }
-    const choice = data.slice(CALLBACK_PREFIX.length)
+    const choice = parsed.choice
     if (choice === DEFAULT_CHOICE) {
       setEffortLevel(chatId, null)
       await ctx.answerCallbackQuery({ text: 'Cleared — using bot default' })
-    } else if (isEffortLevel(choice)) {
+    } else {
       setEffortLevel(chatId, choice)
       await ctx.answerCallbackQuery({ text: `Effort: ${effortLabel(choice)}` })
-    } else {
-      await ctx.answerCallbackQuery({ text: 'Unknown level', show_alert: true })
-      return
     }
     const active = readEffort(chatId)
     const text = [
