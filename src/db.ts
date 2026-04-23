@@ -228,6 +228,14 @@ export function getSession(chatId: string): string | null {
   return row?.session_id ?? null
 }
 
+export function getSessionMeta(chatId: string): { sessionId: string; updatedAt: number } | null {
+  const row = getDb()
+    .prepare('SELECT session_id, updated_at FROM sessions WHERE chat_id = ?')
+    .get(chatId) as { session_id: string; updated_at: number } | undefined
+  if (!row) return null
+  return { sessionId: row.session_id, updatedAt: row.updated_at }
+}
+
 export function setSession(chatId: string, sessionId: string): void {
   getDb()
     .prepare(
