@@ -57,7 +57,18 @@ export function registerUserCommands(bot: Bot): void {
       await ctx.reply('Cannot remove an admin. Edit ADMIN_CHAT_IDS in .env first.')
       return
     }
-    const removed = removeAllowedChat(targetId)
-    await ctx.reply(removed ? `Removed ${targetId}.` : `${targetId} was not in the list.`)
+    const r = removeAllowedChat(targetId)
+    if (!r.removed && r.memoriesDeleted === 0 && !r.sessionCleared && !r.preferencesCleared && r.tasksDeleted === 0) {
+      await ctx.reply(`${targetId} was not in the list.`)
+      return
+    }
+    const pieces = [
+      r.removed ? 'allowlist' : null,
+      r.preferencesCleared ? 'prefs' : null,
+      r.sessionCleared ? 'session' : null,
+      r.memoriesDeleted > 0 ? `${r.memoriesDeleted} memories` : null,
+      r.tasksDeleted > 0 ? `${r.tasksDeleted} tasks` : null,
+    ].filter(Boolean)
+    await ctx.reply(`Removed ${targetId} — purged: ${pieces.join(', ')}.`)
   })
 }

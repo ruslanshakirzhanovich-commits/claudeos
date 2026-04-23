@@ -85,9 +85,31 @@ export function addAllowedChat(chatId: string, addedBy: string | null, note: str
   return info.changes > 0
 }
 
-export function removeAllowedChat(chatId: string): boolean {
-  const info = getDb().prepare('DELETE FROM allowed_chats WHERE chat_id = ?').run(chatId)
-  return info.changes > 0
+export interface RemoveChatResult {
+  removed: boolean
+  memoriesDeleted: number
+  tasksDeleted: number
+  sessionCleared: boolean
+  preferencesCleared: boolean
+}
+
+export function removeAllowedChat(chatId: string): RemoveChatResult {
+  const db = getDb()
+  const tx = db.transaction((id: string): RemoveChatResult => {
+    const allowed = db.prepare('DELETE FROM allowed_chats WHERE chat_id = ?').run(id)
+    const prefs = db.prepare('DELETE FROM chat_preferences WHERE chat_id = ?').run(id)
+    const session = db.prepare('DELETE FROM sessions WHERE chat_id = ?').run(id)
+    const memories = db.prepare('DELETE FROM memories WHERE chat_id = ?').run(id)
+    const tasks = db.prepare('DELETE FROM scheduled_tasks WHERE chat_id = ?').run(id)
+    return {
+      removed: Number(allowed.changes) > 0,
+      memoriesDeleted: Number(memories.changes),
+      tasksDeleted: Number(tasks.changes),
+      sessionCleared: Number(session.changes) > 0,
+      preferencesCleared: Number(prefs.changes) > 0,
+    }
+  })
+  return tx(chatId)
 }
 
 export function seedAllowedChatsFromEnv(chatIds: readonly string[]): number {
