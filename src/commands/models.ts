@@ -1,6 +1,6 @@
 import type { Bot } from 'grammy'
 import { InlineKeyboard } from 'grammy'
-import { isAuthorised, getPreferredModel, setPreferredModel } from '../db.js'
+import { isAuthorised, getPreferredModel, setPreferredModel, clearSession } from '../db.js'
 import { CLAUDE_MODEL } from '../config.js'
 
 interface ModelEntry {
@@ -93,6 +93,7 @@ export function registerModels(bot: Bot): void {
       await ctx.answerCallbackQuery({ text: 'Unknown model', show_alert: true })
       return
     }
+    const previous = getPreferredModel(chatId)
     if (choice === DEFAULT_CHOICE) {
       setPreferredModel(chatId, null)
       await ctx.answerCallbackQuery({ text: 'Cleared — using bot default' })
@@ -101,11 +102,17 @@ export function registerModels(bot: Bot): void {
       const entry = MODELS.find((m) => m.id === choice)
       await ctx.answerCallbackQuery({ text: `Switched to ${entry?.name ?? choice}` })
     }
+    // Resumed sessions stick to the original model; start a fresh one
+    // so the next turn actually uses the new model.
+    const newChoice = choice === DEFAULT_CHOICE ? null : choice
+    if (previous !== newChoice) clearSession(chatId)
     const active = getPreferredModel(chatId)
     const text = [
       '<b>Model for this chat</b>',
       '',
       `Current: ${describeActive(active)}`,
+      '',
+      '<i>Session reset — next message starts a fresh conversation.</i>',
     ].join('\n')
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: buildKeyboard(active) })
