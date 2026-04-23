@@ -14,12 +14,21 @@ import { logger } from './logger.js'
 
 const SEMANTIC_REGEX = /\b(my|i am|i'm|i prefer|remember|always|never|i like|i love|i hate|my name)\b/i
 
-function sanitizeFtsQuery(raw: string): string {
+// FTS5 reserves these as MATCH operators when uppercased. Lowercasing the
+// whole input is enough to defuse them as keywords, but we still drop the
+// lowercased forms from the token list so they don't add noise to the query.
+const FTS_STOP = new Set(['and', 'or', 'not', 'near'])
+
+export function sanitizeFtsQuery(raw: string): string {
   const cleaned = raw
+    .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((t) => t.length >= 3)
-    .slice(0, 5)
+    // Two-char floor instead of three: short Cyrillic/acronym tokens
+    // ("бд", "cs", "ок") carry real signal for recall. Single-char
+    // tokens are still dropped — they match everything.
+    .filter((t) => t.length >= 2 && !FTS_STOP.has(t))
+    .slice(0, 6)
   if (!cleaned.length) return ''
   return cleaned.map((t) => `${t}*`).join(' OR ')
 }

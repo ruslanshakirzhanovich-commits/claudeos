@@ -1,4 +1,4 @@
-import { isDiscordUserAuthorised } from '../config.js'
+import { isDiscordUserAuthorised, isDiscordUserAdmin } from '../config.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
@@ -40,7 +40,7 @@ export async function handleDiscordMessage(
     chatId,
     userMessage: msg.text,
     wrappedUserMessage: wrappedText,
-    permissionMode: 'plan',
+    permissionMode: isDiscordUserAdmin(msg.userId) ? 'bypassPermissions' : 'plan',
     log,
   })
 

@@ -6,6 +6,9 @@ vi.mock('../src/config.js', () => ({
   // Empty allowlist = open mode (matches WhatsApp pattern). The
   // explicit-allowlist case is exercised inside its own test below.
   isDiscordUserAuthorised: (userId: string) => allowlist === null || allowlist.includes(userId),
+  // By default no Discord admins, to match the default config behavior.
+  // Specific tests that want bypassPermissions set this to true.
+  isDiscordUserAdmin: (userId: string) => adminSet !== null && adminSet.includes(userId),
   // src/effort.ts pulls these at module load — must be present even though
   // the discord handler itself does not read them directly.
   CLAUDE_DEFAULT_EFFORT: 'medium',
@@ -16,11 +19,16 @@ vi.mock('../src/config.js', () => ({
   // Rate limit constants pulled by src/rate-limit.ts.
   RATE_LIMIT_CAPACITY: 10,
   RATE_LIMIT_REFILL_PER_MIN: 10,
+  MEMORY_EPISODIC_CAP_PER_CHAT: 1000,
 }))
 
 let allowlist: string[] | null = null
 function setAllowlist(ids: string[] | null): void {
   allowlist = ids
+}
+let adminSet: string[] | null = null
+function setAdminList(ids: string[] | null): void {
+  adminSet = ids
 }
 
 const runAgentSpy = vi.fn()
@@ -69,6 +77,7 @@ beforeEach(() => {
   runAgentSpy.mockReset()
   setSessionSpy.mockReset()
   setAllowlist(null) // open mode by default
+  setAdminList(null) // no admins by default
   resetRateLimitForTest()
 })
 
@@ -136,6 +145,23 @@ describe('handleDiscordMessage', () => {
     expect(String(agentInput)).toContain('hello')
 
     expect(sends).toEqual([['chan-1', 'reply text']])
+  })
+
+  it('upgrades to bypassPermissions when the user is in the discord admin list', async () => {
+    setAdminList(['110440505'])
+    runAgentSpy.mockResolvedValue({ text: 'ok' })
+    const send = vi.fn(async () => {})
+    await handleDiscordMessage(makeMsg(), send)
+    expect(runAgentSpy).toHaveBeenCalledTimes(1)
+    expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'bypassPermissions' })
+  })
+
+  it('stays in plan mode for users not on the admin list', async () => {
+    setAdminList(['some-other-user'])
+    runAgentSpy.mockResolvedValue({ text: 'ok' })
+    const send = vi.fn(async () => {})
+    await handleDiscordMessage(makeMsg(), send)
+    expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'plan' })
   })
 
   it('chunks long replies into multiple sends so we do not exceed 2000 chars', async () => {

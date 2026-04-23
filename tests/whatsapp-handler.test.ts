@@ -2,6 +2,7 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 
 vi.mock('../src/config.js', () => ({
   isWhatsAppAuthorised: () => true,
+  isWhatsAppNumberAdmin: (number: string) => adminSet !== null && adminSet.includes(number),
   MAX_MESSAGE_LENGTH: 4096,
   CLAUDE_DEFAULT_EFFORT: 'medium',
   EFFORT_TOKENS_LOW: 2048,
@@ -10,7 +11,13 @@ vi.mock('../src/config.js', () => ({
   EFFORT_TOKENS_XHIGH: 65536,
   RATE_LIMIT_CAPACITY: 10,
   RATE_LIMIT_REFILL_PER_MIN: 10,
+  MEMORY_EPISODIC_CAP_PER_CHAT: 1000,
 }))
+
+let adminSet: string[] | null = null
+function setAdminList(ids: string[] | null): void {
+  adminSet = ids
+}
 
 const runAgentSpy = vi.fn()
 vi.mock('../src/agent.js', () => ({
@@ -43,6 +50,7 @@ const JID = '15551234567@s.whatsapp.net'
 beforeEach(() => {
   runAgentSpy.mockReset()
   resetRateLimitForTest()
+  setAdminList(null)
 })
 
 describe('handleWhatsAppMessage', () => {
@@ -87,5 +95,24 @@ describe('handleWhatsAppMessage', () => {
     )
     expect(runAgentSpy).not.toHaveBeenCalled()
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it('defaults to plan mode for non-admin numbers', async () => {
+    runAgentSpy.mockResolvedValue({ text: 'ok' })
+    await handleWhatsAppMessage(
+      { jid: JID, text: 'hi', isGroup: false },
+      async () => {},
+    )
+    expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'plan' })
+  })
+
+  it('upgrades to bypassPermissions when the number is on the admin list', async () => {
+    setAdminList(['15551234567'])
+    runAgentSpy.mockResolvedValue({ text: 'ok' })
+    await handleWhatsAppMessage(
+      { jid: JID, text: 'hi', isGroup: false },
+      async () => {},
+    )
+    expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'bypassPermissions' })
   })
 })

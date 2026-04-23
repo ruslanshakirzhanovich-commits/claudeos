@@ -1,4 +1,4 @@
-import { isWhatsAppAuthorised, MAX_MESSAGE_LENGTH } from '../config.js'
+import { isWhatsAppAuthorised, isWhatsAppNumberAdmin, MAX_MESSAGE_LENGTH } from '../config.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
@@ -31,9 +31,7 @@ export async function handleWhatsAppMessage(
     chatId: jid,
     userMessage: text,
     wrappedUserMessage: wrappedText,
-    // WhatsApp users are non-admin by design — plan mode: Claude can
-    // read/reason, cannot execute shell or edit files.
-    permissionMode: 'plan',
+    permissionMode: isWhatsAppNumberAdmin(number) ? 'bypassPermissions' : 'plan',
     log,
   })
 

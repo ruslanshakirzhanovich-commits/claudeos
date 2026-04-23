@@ -138,6 +138,25 @@ export function isDiscordUserAuthorised(userId: string): boolean {
   return isDiscordUserAuthorisedOf(ALLOWED_DISCORD_USERS, userId)
 }
 
+// Discord admin list. Unlike ADMIN_CHAT_IDS (Telegram), there is no
+// fall-back to the allowlist: Discord allowlist runs in open mode when
+// empty, and auto-promoting strangers to bypassPermissions is a
+// footgun. Empty = nobody is an admin, everyone stays in plan mode.
+const rawAdminDiscord = env['ADMIN_DISCORD_USERS'] ?? ''
+export const ADMIN_DISCORD_USERS: readonly string[] = rawAdminDiscord
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+export function isDiscordUserAdminOf(admins: readonly string[], userId: string): boolean {
+  if (admins.length === 0) return false
+  return admins.includes(userId)
+}
+
+export function isDiscordUserAdmin(userId: string): boolean {
+  return isDiscordUserAdminOf(ADMIN_DISCORD_USERS, userId)
+}
+
 export const WHATSAPP_META_ACCESS_TOKEN = env['WHATSAPP_META_ACCESS_TOKEN'] ?? ''
 export const WHATSAPP_META_PHONE_NUMBER_ID = env['WHATSAPP_META_PHONE_NUMBER_ID'] ?? ''
 export const WHATSAPP_META_VERIFY_TOKEN = env['WHATSAPP_META_VERIFY_TOKEN'] ?? ''
@@ -159,4 +178,21 @@ export function isWhatsAppAuthorisedOf(allowed: readonly string[], number: strin
 
 export function isWhatsAppAuthorised(number: string): boolean {
   return isWhatsAppAuthorisedOf(ALLOWED_WHATSAPP_NUMBERS, number)
+}
+
+// WhatsApp admin list. Same shape as the Discord one — no fallback to
+// the allowlist, empty means nobody is an admin.
+const rawAdminWhatsApp = env['ADMIN_WHATSAPP_NUMBERS'] ?? ''
+export const ADMIN_WHATSAPP_NUMBERS: readonly string[] = rawAdminWhatsApp
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+export function isWhatsAppNumberAdminOf(admins: readonly string[], number: string): boolean {
+  if (admins.length === 0) return false
+  return admins.includes(number)
+}
+
+export function isWhatsAppNumberAdmin(number: string): boolean {
+  return isWhatsAppNumberAdminOf(ADMIN_WHATSAPP_NUMBERS, number)
 }
