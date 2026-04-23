@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { PROJECT_ROOT, CLAUDE_MD_PATH, CLAUDE_MODEL } from './config.js'
 import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
+import { runSerialPerChat } from './chat-queue.js'
 import { recordEvent } from './metrics.js'
 import { effortToThinkingTokens, isEffortLevel } from './effort.js'
 import { recordUsage, recordCompaction } from './usage.js'
@@ -58,7 +59,9 @@ export async function runAgent(
   if (!opts || !opts.permissionMode) {
     throw new Error('runAgent: permissionMode is required (no implicit bypassPermissions)')
   }
-  return trackInflight(runAgentInner(message, opts))
+  const run = () => trackInflight(runAgentInner(message, opts))
+  if (opts.chatId) return runSerialPerChat(opts.chatId, run)
+  return run()
 }
 
 async function runAgentInner(

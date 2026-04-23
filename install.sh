@@ -155,7 +155,7 @@ ok ".env создан (${ENV_FILE}, chmod 600)"
 
 # ── Step 9: npm install + build ────────────────────────────────────────────
 info "Собираю проект (npm install + npm run build) под ${CLAW_USER}…"
-sudo -u "${CLAW_USER}" bash -lc "cd '${INSTALL_DIR}' && npm install --no-audit --no-fund && npm run build"
+sudo -u "${CLAW_USER}" bash -lc "cd '${INSTALL_DIR}' && npm install --no-fund && npm run build"
 ok "Сборка завершена"
 
 # Убедимся, что store/ существует и принадлежит claw

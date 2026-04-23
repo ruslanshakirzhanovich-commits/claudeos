@@ -5,33 +5,18 @@ import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
+import { splitMessage } from '../format.js'
 import type { DiscordIncomingMessage, DiscordSendReply } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
 const DISCORD_MESSAGE_LIMIT = 2000
 
-// Namespace Discord chats so their per-chat rows in sessions/memories/
-// chat_preferences cannot collide with Telegram (numeric) or WhatsApp
-// (jid@s.whatsapp.net) identifiers stored in the same tables.
 export function chatIdForDiscordUser(userId: string): string {
   return CHAT_ID_PREFIX + userId
 }
 
-// Discord caps a single message at 2000 characters. Slice on newline
-// boundaries when possible so chunks read naturally; fall back to a
-// hard cut for one giant unbroken line.
 export function chunkForDiscord(text: string, limit: number = DISCORD_MESSAGE_LIMIT): string[] {
-  if (text.length <= limit) return [text]
-  const chunks: string[] = []
-  let remaining = text
-  while (remaining.length > limit) {
-    let cut = remaining.lastIndexOf('\n', limit)
-    if (cut <= 0) cut = limit
-    chunks.push(remaining.slice(0, cut))
-    remaining = remaining.slice(cut).replace(/^\n/, '')
-  }
-  if (remaining.length > 0) chunks.push(remaining)
-  return chunks
+  return splitMessage(text, limit)
 }
 
 export async function handleDiscordMessage(

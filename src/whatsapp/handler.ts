@@ -1,10 +1,11 @@
-import { isWhatsAppAuthorised } from '../config.js'
+import { isWhatsAppAuthorised, MAX_MESSAGE_LENGTH } from '../config.js'
 import { runAgent } from '../agent.js'
 import { getSession, setSession, getEffortLevel, getPreferredModel } from '../db.js'
 import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
+import { splitMessage } from '../format.js'
 import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -45,7 +46,9 @@ export async function handleWhatsAppMessage(
     const replyText = reply ?? '(no output)'
     if (reply) await saveConversationTurn(jid, text, reply)
 
-    await send(jid, replyText)
+    for (const chunk of splitMessage(replyText, MAX_MESSAGE_LENGTH)) {
+      await send(jid, chunk)
+    }
   } catch (err) {
     log.error({ err }, 'handleWhatsAppMessage failed')
     const message = err instanceof Error ? err.message : String(err)
