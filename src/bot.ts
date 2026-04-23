@@ -10,6 +10,7 @@ import {
 import { formatForTelegram, splitMessage } from './format.js'
 import { registerVersion } from './commands/version.js'
 import { registerVoice } from './commands/voice.js'
+import { registerPing, registerStats } from './commands/stats.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -254,54 +255,8 @@ export function createBot(): Bot {
     await ctx.reply(removed ? `Removed ${targetId}.` : `${targetId} was not in the list.`)
   })
 
-  bot.command('ping', async (ctx) => {
-    const up = Math.round(process.uptime())
-    const d = Math.floor(up / 86400)
-    const h = Math.floor((up % 86400) / 3600)
-    const m = Math.floor((up % 3600) / 60)
-    const s = up % 60
-    const uptimeStr = d ? `${d}d ${h}h ${m}m` : h ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`
-    await ctx.reply(`pong · pid ${process.pid} · uptime ${uptimeStr}`)
-  })
-
-  bot.command('stats', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAuthorised(chatId)) return
-    const s = getBotStats()
-    const mem = process.memoryUsage()
-    const rssMb = (mem.rss / (1024 * 1024)).toFixed(0)
-    const heapMb = (mem.heapUsed / (1024 * 1024)).toFixed(0)
-    const up = Math.round(process.uptime())
-    const d = Math.floor(up / 86400)
-    const h = Math.floor((up % 86400) / 3600)
-    const m = Math.floor((up % 3600) / 60)
-    const uptimeStr = d ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`
-
-    const body = [
-      `<b>ClaudeClaw stats</b>`,
-      ``,
-      `<b>Users</b>`,
-      `  authorised chats: ${s.allowedChats}`,
-      `  chats with memory: ${s.uniqueChatsWithMemories}`,
-      ``,
-      `<b>Memory</b>`,
-      `  total records: ${s.totalMemories}`,
-      `  added last 24h: ${s.memoriesLast24h}`,
-      ``,
-      `<b>Scheduler</b>`,
-      `  active tasks: ${s.activeTasks}`,
-      `  paused tasks: ${s.pausedTasks}`,
-      ``,
-      `<b>Process</b>`,
-      `  pid: ${process.pid}`,
-      `  uptime: ${uptimeStr}`,
-      `  memory (RSS / heap): ${rssMb}MB / ${heapMb}MB`,
-      `  node: ${process.versions.node}`,
-      `  schema version: ${getSchemaVersion()}`,
-    ].join('\n')
-
-    await ctx.reply(body, { parse_mode: 'HTML' })
-  })
+  registerPing(bot)
+  registerStats(bot)
 
   bot.command('backup', async (ctx) => {
     const chatId = String(ctx.chat?.id ?? '')
