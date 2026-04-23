@@ -1,12 +1,9 @@
 import { isDiscordUserAuthorised } from '../config.js'
-import { runAgent } from '../agent.js'
-import { getSession, setSession, getEffortLevel, getPreferredModel } from '../db.js'
-import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
-import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
 import { splitMessage } from '../format.js'
-import { tryConsume, rateLimitMessage } from '../rate-limit.js'
+import { rateLimitMessage } from '../rate-limit.js'
+import { runChatPipeline } from '../chat-pipeline.js'
 import type { DiscordIncomingMessage, DiscordSendReply } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
@@ -36,53 +33,33 @@ export async function handleDiscordMessage(
   }
 
   const chatId = chatIdForDiscordUser(msg.userId)
-  const rl = tryConsume(chatId)
-  if (!rl.ok) {
-    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
-    try {
-      await send(msg.channelId, rateLimitMessage(rl.retryAfterMs))
-    } catch {
-      /* ignore */
-    }
-    return
-  }
-
   log.info({ preview: msg.text.slice(0, 80) }, 'message received')
+
+  const wrappedText = wrapUntrusted(msg.text, 'discord_message', { from: msg.authorTag })
+  const result = await runChatPipeline({
+    chatId,
+    userMessage: msg.text,
+    wrappedUserMessage: wrappedText,
+    permissionMode: 'plan',
+    log,
+  })
+
   try {
-    const memoryContext = await buildMemoryContext(chatId, msg.text)
-    const wrappedText = wrapUntrusted(msg.text, 'discord_message', { from: msg.authorTag })
-    const messageForAgent = memoryContext ? `${memoryContext}\n\n${wrappedText}` : wrappedText
-
-    const sessionId = getSession(chatId) ?? undefined
-    const model = getPreferredModel(chatId) ?? undefined
-    const storedEffort = getEffortLevel(chatId)
-    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
-    // Discord users get plan mode (read/reason, no shell/edits) — same
-    // posture as WhatsApp. No ADMIN_DISCORD_USERS concept yet.
-    const { text: reply, newSessionId } = await runAgent(messageForAgent, {
-      sessionId,
-      permissionMode: 'plan',
-      log,
-      model,
-      effort,
-      chatId,
-    })
-
-    if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
-
-    const replyText = reply ?? '(no output)'
-    if (reply) await saveConversationTurn(chatId, msg.text, reply)
-
+    if (result.kind === 'rate-limited') {
+      await send(msg.channelId, rateLimitMessage(result.retryAfterMs))
+      return
+    }
+    if (result.kind === 'error') {
+      log.error({ err: result.error }, 'handleDiscordMessage failed')
+      const message = result.error.message.slice(0, 500)
+      await send(msg.channelId, `Error: ${message}`)
+      return
+    }
+    const replyText = result.text ?? '(no output)'
     for (const chunk of chunkForDiscord(replyText)) {
       await send(msg.channelId, chunk)
     }
   } catch (err) {
-    log.error({ err }, 'handleDiscordMessage failed')
-    const message = err instanceof Error ? err.message : String(err)
-    try {
-      await send(msg.channelId, `Error: ${message.slice(0, 500)}`)
-    } catch {
-      /* ignore */
-    }
+    log.error({ err }, 'discord send failed')
   }
 }

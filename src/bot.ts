@@ -17,12 +17,7 @@ import { registerUpdate } from './commands/update.js'
 import { registerModels } from './commands/models.js'
 import { registerStatus } from './commands/status.js'
 import { registerEffort } from './commands/effort.js'
-import { runAgent } from './agent.js'
 import {
-  getSession,
-  setSession,
-  getPreferredModel,
-  getEffortLevel,
   clearSession,
   countMemories,
   getTtsEnabled,
@@ -34,7 +29,6 @@ import {
   touchAllowedChat,
   getSchemaVersion,
 } from './db.js'
-import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
   transcribeAudio,
   voiceCapabilities,
@@ -49,9 +43,9 @@ import {
 import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { wrapUntrusted } from './untrusted.js'
-import { CHAT_DEFAULT_EFFORT, isEffortLevel } from './effort.js'
 import { resetUsage } from './usage.js'
-import { tryConsume, rateLimitMessage } from './rate-limit.js'
+import { rateLimitMessage } from './rate-limit.js'
+import { runChatPipeline } from './chat-pipeline.js'
 
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
@@ -114,41 +108,39 @@ async function handleMessage(
     return
   }
 
-  const rl = tryConsume(chatId)
-  if (!rl.ok) {
-    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
-    await ctx.reply(rateLimitMessage(rl.retryAfterMs)).catch(() => {})
-    return
-  }
-
   if (isOpenMode()) warnOpenModeOnce(chatId, userId, username, log)
 
   touchAllowedChat(chatId)
   const memoryText = opts.memoryText ?? agentInput
   log.info({ preview: memoryText.slice(0, 80) }, 'message received')
 
-  let typingInterval: NodeJS.Timeout | null = null
-  try {
+  await ctx.replyWithChatAction('typing').catch(() => {})
+  const sendTyping = nonOverlapping(async () => {
     await ctx.replyWithChatAction('typing').catch(() => {})
-    const sendTyping = nonOverlapping(async () => {
-      await ctx.replyWithChatAction('typing').catch(() => {})
+  })
+  const typingInterval: NodeJS.Timeout = setInterval(sendTyping, TYPING_REFRESH_MS)
+
+  try {
+    const result = await runChatPipeline({
+      chatId,
+      userMessage: memoryText,
+      wrappedUserMessage: agentInput,
+      permissionMode: isAdmin(chatId) ? 'bypassPermissions' : 'plan',
+      log,
     })
-    typingInterval = setInterval(sendTyping, TYPING_REFRESH_MS)
 
-    const memoryContext = await buildMemoryContext(chatId, memoryText)
-    const messageForAgent = memoryContext ? `${memoryContext}\n\n${agentInput}` : agentInput
+    if (result.kind === 'rate-limited') {
+      await ctx.reply(rateLimitMessage(result.retryAfterMs)).catch(() => {})
+      return
+    }
+    if (result.kind === 'error') {
+      log.error({ err: result.error }, 'handleMessage failed')
+      const message = result.error.message.slice(0, 500)
+      await ctx.reply(`Error: ${message}`).catch(() => {})
+      return
+    }
 
-    const sessionId = getSession(chatId) ?? undefined
-    const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
-    const model = getPreferredModel(chatId) ?? undefined
-    const storedEffort = getEffortLevel(chatId)
-    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
-    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model, effort, chatId })
-
-    if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
-
-    if (text) await saveConversationTurn(chatId, memoryText, text)
-
+    const text = result.text
     const replyText = text ?? '(no output)'
     const wantVoice =
       (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
@@ -168,16 +160,8 @@ async function handleMessage(
     } else {
       await sendResponse(ctx, replyText)
     }
-  } catch (err) {
-    log.error({ err }, 'handleMessage failed')
-    const msg = err instanceof Error ? err.message : String(err)
-    try {
-      await ctx.reply(`Error: ${msg.slice(0, 500)}`)
-    } catch {
-      /* ignore */
-    }
   } finally {
-    if (typingInterval) clearInterval(typingInterval)
+    clearInterval(typingInterval)
   }
 }
 

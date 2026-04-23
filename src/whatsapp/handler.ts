@@ -1,12 +1,9 @@
 import { isWhatsAppAuthorised, MAX_MESSAGE_LENGTH } from '../config.js'
-import { runAgent } from '../agent.js'
-import { getSession, setSession, getEffortLevel, getPreferredModel } from '../db.js'
-import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
-import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
 import { splitMessage } from '../format.js'
-import { tryConsume, rateLimitMessage } from '../rate-limit.js'
+import { rateLimitMessage } from '../rate-limit.js'
+import { runChatPipeline } from '../chat-pipeline.js'
 import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -27,47 +24,35 @@ export async function handleWhatsAppMessage(
     return
   }
 
-  const rl = tryConsume(jid)
-  if (!rl.ok) {
-    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
-    try {
-      await send(jid, rateLimitMessage(rl.retryAfterMs))
-    } catch {
-      /* ignore */
-    }
-    return
-  }
-
   log.info({ preview: text.slice(0, 80) }, 'message received')
 
+  const wrappedText = wrapUntrusted(text, 'whatsapp_message', { from: number })
+  const result = await runChatPipeline({
+    chatId: jid,
+    userMessage: text,
+    wrappedUserMessage: wrappedText,
+    // WhatsApp users are non-admin by design — plan mode: Claude can
+    // read/reason, cannot execute shell or edit files.
+    permissionMode: 'plan',
+    log,
+  })
+
   try {
-    const memoryContext = await buildMemoryContext(jid, text)
-    const wrappedText = wrapUntrusted(text, 'whatsapp_message', { from: number })
-    const messageForAgent = memoryContext ? `${memoryContext}\n\n${wrappedText}` : wrappedText
-
-    const sessionId = getSession(jid) ?? undefined
-    const model = getPreferredModel(jid) ?? undefined
-    const storedEffort = getEffortLevel(jid)
-    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
-    // WhatsApp users are non-admin by design — no ADMIN_WHATSAPP_NUMBERS concept yet.
-    // They get `plan` mode: Claude can read/reason, cannot execute shell or edit files.
-    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan', log, model, effort, chatId: jid })
-
-    if (newSessionId && newSessionId !== sessionId) setSession(jid, newSessionId)
-
-    const replyText = reply ?? '(no output)'
-    if (reply) await saveConversationTurn(jid, text, reply)
-
+    if (result.kind === 'rate-limited') {
+      await send(jid, rateLimitMessage(result.retryAfterMs))
+      return
+    }
+    if (result.kind === 'error') {
+      log.error({ err: result.error }, 'handleWhatsAppMessage failed')
+      const message = result.error.message.slice(0, 500)
+      await send(jid, `Error: ${message}`)
+      return
+    }
+    const replyText = result.text ?? '(no output)'
     for (const chunk of splitMessage(replyText, MAX_MESSAGE_LENGTH)) {
       await send(jid, chunk)
     }
   } catch (err) {
-    log.error({ err }, 'handleWhatsAppMessage failed')
-    const message = err instanceof Error ? err.message : String(err)
-    try {
-      await send(jid, `Error: ${message.slice(0, 500)}`)
-    } catch {
-      /* ignore */
-    }
+    log.error({ err }, 'whatsapp send failed')
   }
 }
