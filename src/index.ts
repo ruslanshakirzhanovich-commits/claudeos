@@ -18,6 +18,7 @@ import { initDatabase, seedAllowedChatsFromEnv, isOpenMode } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
+import { publishBotCommands } from './commands-menu.js'
 import { runDecaySweep } from './memory.js'
 import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
@@ -120,6 +121,7 @@ async function main(): Promise<void> {
   cleanupOldPreviews()
 
   const bot = createBot()
+  void publishBotCommands(bot)
   const schedulerTimer = initScheduler(async (chatId, text) => sendToChat(chatId, text))
 
   initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
