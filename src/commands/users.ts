@@ -1,6 +1,6 @@
 import type { Bot } from 'grammy'
 import { isAdmin } from '../config.js'
-import { listAllowedChats, addAllowedChat, removeAllowedChat } from '../db.js'
+import { listAllowedChats, addAllowedChat, removeAllowedChat, isValidTelegramChatId } from '../db.js'
 
 export function registerUserCommands(bot: Bot): void {
   bot.command('listusers', async (ctx) => {
@@ -34,8 +34,8 @@ export function registerUserCommands(bot: Bot): void {
     const parts = (ctx.message?.text ?? '').split(/\s+/)
     const targetId = parts[1]?.trim()
     const note = parts.slice(2).join(' ').trim() || null
-    if (!targetId || !/^-?\d+$/.test(targetId)) {
-      await ctx.reply('Usage: /adduser &lt;chat_id&gt; [note]', { parse_mode: 'HTML' })
+    if (!targetId || !isValidTelegramChatId(targetId)) {
+      await ctx.reply('Usage: /adduser &lt;chat_id&gt; [note]\n\nMust be a Telegram chat id (digits, optional minus). WhatsApp jids are managed separately.', { parse_mode: 'HTML' })
       return
     }
     const added = addAllowedChat(targetId, chatId, note)
@@ -49,7 +49,7 @@ export function registerUserCommands(bot: Bot): void {
       return
     }
     const targetId = (ctx.message?.text ?? '').split(/\s+/)[1]?.trim()
-    if (!targetId || !/^-?\d+$/.test(targetId)) {
+    if (!targetId || !isValidTelegramChatId(targetId)) {
       await ctx.reply('Usage: /removeuser &lt;chat_id&gt;', { parse_mode: 'HTML' })
       return
     }

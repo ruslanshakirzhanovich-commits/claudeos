@@ -74,7 +74,20 @@ export function countAllowedChats(): number {
   return row.c
 }
 
+// Telegram chat ids are signed 64-bit integers. WhatsApp jids look like
+// "15551234567@s.whatsapp.net" — reject those at the DB boundary so a future
+// caller (new admin command, import script, REST endpoint) cannot accidentally
+// poison `allowed_chats` with a non-Telegram identifier.
+const TELEGRAM_CHAT_ID_RE = /^-?\d+$/
+
+export function isValidTelegramChatId(chatId: string): boolean {
+  return TELEGRAM_CHAT_ID_RE.test(chatId)
+}
+
 export function addAllowedChat(chatId: string, addedBy: string | null, note: string | null): boolean {
+  if (!isValidTelegramChatId(chatId)) {
+    throw new Error(`addAllowedChat: not a Telegram chat id: ${chatId.slice(0, 80)}`)
+  }
   const info = getDb()
     .prepare(
       `INSERT INTO allowed_chats (chat_id, added_at, added_by, note)
@@ -116,6 +129,7 @@ export function seedAllowedChatsFromEnv(chatIds: readonly string[]): number {
   if (countAllowedChats() > 0) return 0
   let seeded = 0
   for (const id of chatIds) {
+    if (!isValidTelegramChatId(id)) continue
     if (addAllowedChat(id, 'env', 'seeded from ALLOWED_CHAT_IDS')) seeded++
   }
   return seeded
