@@ -282,6 +282,11 @@ export function decayMemories(): { decayed: number; deleted: number } {
   return { decayed: Number(decayInfo.changes), deleted: Number(delInfo.changes) }
 }
 
+export function optimizeFts(): void {
+  const db = getDb()
+  db.exec(`INSERT INTO memories_fts(memories_fts, rank) VALUES('merge', -16)`)
+}
+
 export function countMemories(chatId?: string): number {
   const row = chatId
     ? (getDb()

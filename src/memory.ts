@@ -4,6 +4,7 @@ import {
   getRecentMemories,
   touchMemory,
   decayMemories,
+  optimizeFts,
   type MemoryRow,
 } from './db.js'
 import { logger } from './logger.js'
@@ -70,6 +71,11 @@ export async function saveConversationTurn(
 export function runDecaySweep(): void {
   try {
     const { decayed, deleted } = decayMemories()
+    try {
+      optimizeFts()
+    } catch (err) {
+      logger.warn({ err }, 'FTS5 incremental merge failed')
+    }
     logger.info({ decayed, deleted }, 'memory decay sweep complete')
   } catch (err) {
     logger.warn({ err }, 'memory decay sweep failed')
