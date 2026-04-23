@@ -22,6 +22,22 @@ export function initDatabase(): void {
   runMigrations(db)
 }
 
+/**
+ * Close the database handle and clear the singleton. Intended for tests
+ * that create a throwaway DB and need a clean slate between suites — or
+ * for a graceful shutdown path that wants SQLite to flush WAL cleanly
+ * before process exit. Safe to call multiple times.
+ */
+export function closeDb(): void {
+  if (!_db) return
+  try {
+    _db.close()
+  } catch {
+    /* already closed */
+  }
+  _db = null
+}
+
 export function getSchemaVersion(): number {
   return getCurrentSchemaVersion(getDb())
 }

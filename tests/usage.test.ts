@@ -14,7 +14,7 @@ vi.mock('../src/logger.js', () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }))
 
-const { initDatabase } = await import('../src/db.js')
+const { initDatabase, closeDb } = await import('../src/db.js')
 const { recordUsage, recordCompaction, resetUsage, getUsage } = await import('../src/usage.js')
 
 initDatabase()
@@ -24,6 +24,7 @@ const CHAT = 'test-chat-usage'
 beforeEach(() => resetUsage(CHAT))
 
 afterAll(() => {
+  closeDb()
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   } catch {

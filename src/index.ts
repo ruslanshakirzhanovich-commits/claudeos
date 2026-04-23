@@ -14,7 +14,7 @@ import {
   BACKUP_INTERVAL_HOURS,
   BACKUP_KEEP,
 } from './config.js'
-import { initDatabase, seedAllowedChatsFromEnv, isOpenMode } from './db.js'
+import { initDatabase, seedAllowedChatsFromEnv, isOpenMode, closeDb } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
@@ -154,6 +154,7 @@ async function main(): Promise<void> {
       logger.warn({ remaining }, 'exiting with inflight work still running')
     }
     if (previewServer) previewServer.close()
+    closeDb()
     releaseLock()
     process.exit(0)
   }
