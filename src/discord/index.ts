@@ -16,9 +16,12 @@ function createClient(): DiscordClient {
     },
     async start() {
       client = new Client({
+        // DM-only bot: we need DirectMessages for DM events and
+        // MessageContent (privileged) to read their text. Guilds and
+        // GuildMessages were unused — their gateway events were skipped
+        // in the handler, and GuildMessages becomes a Discord-approval
+        // gate once the bot joins 100+ servers.
         intents: [
-          GatewayIntentBits.Guilds,
-          GatewayIntentBits.GuildMessages,
           GatewayIntentBits.DirectMessages,
           GatewayIntentBits.MessageContent,
         ],
