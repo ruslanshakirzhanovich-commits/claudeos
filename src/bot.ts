@@ -6,6 +6,7 @@ import {
   isAdmin,
 } from './config.js'
 import { formatForTelegram, splitMessage } from './format.js'
+import { nonOverlapping } from './scheduler.js'
 import { registerVersion } from './commands/version.js'
 import { registerVoice } from './commands/voice.js'
 import { registerPing, registerStats } from './commands/stats.js'
@@ -115,10 +116,10 @@ async function handleMessage(
   let typingInterval: NodeJS.Timeout | null = null
   try {
     await ctx.replyWithChatAction('typing').catch(() => {})
-    typingInterval = setInterval(
-      () => ctx.replyWithChatAction('typing').catch(() => {}),
-      TYPING_REFRESH_MS,
-    )
+    const sendTyping = nonOverlapping(async () => {
+      await ctx.replyWithChatAction('typing').catch(() => {})
+    })
+    typingInterval = setInterval(sendTyping, TYPING_REFRESH_MS)
 
     const memoryContext = await buildMemoryContext(chatId, rawText)
     const messageForAgent = memoryContext ? `${memoryContext}\n\n${rawText}` : rawText
