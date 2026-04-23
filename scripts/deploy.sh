@@ -23,6 +23,24 @@ say() { printf "\n==> %s\n" "$*"; }
 
 say "Deploying from ${PROJECT_ROOT} (service: ${SERVICE_NAME})"
 
+# Fail-fast: verify we can restart the service via passwordless sudo BEFORE
+# touching any code on disk. Otherwise a bad sudoers config lets us git-pull,
+# npm-ci, and build a new version without ever restarting it — the service
+# keeps running the old code while the filesystem has new code.
+# Override with CLAUDECLAW_SKIP_SUDO_CHECK=1 if your environment is different
+# (e.g. running under systemd with CAP_SYS_ADMIN, or deploying somewhere that
+# restarts out-of-band).
+if [ "${CLAUDECLAW_SKIP_SUDO_CHECK:-}" != "1" ]; then
+  say "Checking passwordless sudo for systemctl"
+  if ! sudo -n systemctl show "${SERVICE_NAME}" --property=LoadState > /dev/null 2>&1; then
+    echo "!! sudo -n systemctl fails — passwordless sudo required to restart ${SERVICE_NAME}." >&2
+    echo "   Configure /etc/sudoers.d/claudeclaw, e.g.:" >&2
+    echo "     claw ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl show ${SERVICE_NAME}" >&2
+    echo "   Or set CLAUDECLAW_SKIP_SUDO_CHECK=1 if restart happens out-of-band." >&2
+    exit 1
+  fi
+fi
+
 say "Fetching origin/main"
 git fetch origin main
 
