@@ -28,15 +28,23 @@ function loadClaudeMd(): string {
   }
 }
 
-function wrapWithClaudeMd(userMessage: string): string {
+function wrapWithClaudeMd(userMessage: string, activeModel: string | undefined): string {
   const claudeMd = loadClaudeMd()
-  if (!claudeMd) return userMessage
-  return (
-    'You MUST follow these instructions at all times, this is your identity and personality:\n\n' +
-    claudeMd +
-    '\n\n---\nUser message:\n' +
-    userMessage
-  )
+  const parts: string[] = []
+  if (activeModel) {
+    parts.push(
+      `You are currently running as model id: ${activeModel}. When the user asks about your model, respond with this exact id.`,
+    )
+  }
+  if (claudeMd) {
+    parts.push(
+      'You MUST follow these instructions at all times, this is your identity and personality:',
+      '',
+      claudeMd,
+    )
+  }
+  if (parts.length === 0) return userMessage
+  return parts.join('\n\n') + '\n\n---\nUser message:\n' + userMessage
 }
 
 export async function runAgent(
@@ -51,7 +59,8 @@ async function runAgentInner(
   opts: RunAgentOptions,
 ): Promise<AgentResult> {
   const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model } = opts
-  const wrapped = wrapWithClaudeMd(message)
+  const effectiveModel = model || CLAUDE_MODEL || undefined
+  const wrapped = wrapWithClaudeMd(message, effectiveModel)
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
 
@@ -65,7 +74,6 @@ async function runAgentInner(
       permissionMode,
     }
     if (sessionId) options['resume'] = sessionId
-    const effectiveModel = model ?? CLAUDE_MODEL
     if (effectiveModel) options['model'] = effectiveModel
 
     const stream = query({ prompt: wrapped, options: options as any })
