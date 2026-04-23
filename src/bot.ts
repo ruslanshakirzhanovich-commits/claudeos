@@ -103,8 +103,8 @@ function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined
 
 async function handleMessage(
   ctx: Context,
-  rawText: string,
-  opts: { forceVoice?: boolean } = {},
+  agentInput: string,
+  opts: { forceVoice?: boolean; memoryText?: string } = {},
 ): Promise<void> {
   const { chatId, userId, username } = ctxIdentity(ctx)
   if (!chatId) return
@@ -118,7 +118,8 @@ async function handleMessage(
   if (isOpenMode()) warnOpenModeOnce(chatId, userId, username, log)
 
   touchAllowedChat(chatId)
-  log.info({ preview: rawText.slice(0, 80) }, 'message received')
+  const memoryText = opts.memoryText ?? agentInput
+  log.info({ preview: memoryText.slice(0, 80) }, 'message received')
 
   let typingInterval: NodeJS.Timeout | null = null
   try {
@@ -128,8 +129,8 @@ async function handleMessage(
     })
     typingInterval = setInterval(sendTyping, TYPING_REFRESH_MS)
 
-    const memoryContext = await buildMemoryContext(chatId, rawText)
-    const messageForAgent = memoryContext ? `${memoryContext}\n\n${rawText}` : rawText
+    const memoryContext = await buildMemoryContext(chatId, memoryText)
+    const messageForAgent = memoryContext ? `${memoryContext}\n\n${agentInput}` : agentInput
 
     const sessionId = getSession(chatId) ?? undefined
     const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
@@ -140,7 +141,7 @@ async function handleMessage(
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 
-    if (text) await saveConversationTurn(chatId, rawText, text)
+    if (text) await saveConversationTurn(chatId, memoryText, text)
 
     const replyText = text ?? '(no output)'
     const wantVoice =
@@ -227,7 +228,9 @@ export function createBot(): Bot {
   bot.on('message:text', async (ctx) => {
     const text = ctx.message?.text ?? ''
     if (text.startsWith('/')) return
-    await handleMessage(ctx, text)
+    const from = ctx.from?.username ?? ctx.from?.first_name ?? String(ctx.from?.id ?? '')
+    const wrapped = wrapUntrusted(text, 'telegram_text', { from })
+    await handleMessage(ctx, wrapped, { memoryText: text })
   })
 
   bot.on('message:voice', async (ctx) => {
@@ -253,7 +256,7 @@ export function createBot(): Bot {
       }
       await ctx.reply(`Heard: "${transcript.slice(0, 200)}"`).catch(() => {})
       const wrapped = wrapUntrusted(transcript, 'voice_transcript', { source: 'groq-whisper' })
-      await handleMessage(ctx, wrapped, { forceVoice: true })
+      await handleMessage(ctx, wrapped, { forceVoice: true, memoryText: transcript })
     } catch (err) {
       log.error({ err }, 'voice handler failed')
       await ctx.reply(`Voice error: ${(err as Error).message}`).catch(() => {})
@@ -277,7 +280,9 @@ export function createBot(): Bot {
         `photo_${Date.now()}.jpg`,
       )
       const caption = ctx.message?.caption ?? ''
-      await handleMessage(ctx, buildPhotoMessage(localPath, caption))
+      await handleMessage(ctx, buildPhotoMessage(localPath, caption), {
+        memoryText: caption || '[user sent a photo]',
+      })
     } catch (err) {
       log.error({ err }, 'photo handler failed')
       await ctx.reply(`Photo error: ${(err as Error).message}`).catch(() => {})
@@ -296,9 +301,11 @@ export function createBot(): Bot {
       if (!doc) return
       const localPath = await downloadMedia(TELEGRAM_BOT_TOKEN, doc.file_id, doc.file_name)
       const caption = ctx.message?.caption ?? ''
+      const filename = doc.file_name ?? path.basename(localPath)
       await handleMessage(
         ctx,
-        buildDocumentMessage(localPath, doc.file_name ?? path.basename(localPath), caption),
+        buildDocumentMessage(localPath, filename, caption),
+        { memoryText: caption || `[user sent a document: ${filename}]` },
       )
     } catch (err) {
       log.error({ err }, 'document handler failed')
