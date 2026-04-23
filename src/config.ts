@@ -45,9 +45,13 @@ export const ADMIN_CHAT_IDS: readonly string[] = (rawAdmin
   ? rawAdmin.split(',').map((s) => s.trim()).filter(Boolean)
   : ALLOWED_CHAT_IDS.slice(0, 1))
 
+export function isAdminOf(admins: readonly string[], chatId: number | string): boolean {
+  if (admins.length === 0) return false
+  return admins.includes(String(chatId))
+}
+
 export function isAdmin(chatId: number | string): boolean {
-  if (ADMIN_CHAT_IDS.length === 0) return false
-  return ADMIN_CHAT_IDS.includes(String(chatId))
+  return isAdminOf(ADMIN_CHAT_IDS, chatId)
 }
 
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
@@ -77,7 +81,11 @@ export const ALLOWED_WHATSAPP_NUMBERS: readonly string[] = rawWhatsapp
   .map((s) => s.trim())
   .filter(Boolean)
 
+export function isWhatsAppAuthorisedOf(allowed: readonly string[], number: string): boolean {
+  if (allowed.length === 0) return true
+  return allowed.includes(number)
+}
+
 export function isWhatsAppAuthorised(number: string): boolean {
-  if (ALLOWED_WHATSAPP_NUMBERS.length === 0) return true
-  return ALLOWED_WHATSAPP_NUMBERS.includes(number)
+  return isWhatsAppAuthorisedOf(ALLOWED_WHATSAPP_NUMBERS, number)
 }
