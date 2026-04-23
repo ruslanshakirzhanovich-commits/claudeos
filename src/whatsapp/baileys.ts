@@ -130,5 +130,9 @@ export function createBaileysClient(): WhatsAppClient {
     onMessage(handler) {
       msgHandler = handler
     },
+    async sendText(jid, body) {
+      if (!sock) throw new Error('baileys socket not connected')
+      await sock.sendMessage(jid, { text: body })
+    },
   }
 }

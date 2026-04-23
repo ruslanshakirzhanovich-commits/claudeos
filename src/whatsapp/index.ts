@@ -41,3 +41,11 @@ export async function stopWhatsApp(): Promise<void> {
   }
   active = null
 }
+
+// Non-reply outbound send (scheduler, cross-channel routing). Throws if the
+// client isn't running, so the caller can decide whether to skip, retry, or
+// annotate the scheduled task as "channel unavailable".
+export async function sendToWhatsAppJid(jid: string, text: string): Promise<void> {
+  if (!active) throw new Error('WhatsApp client not available (disabled or not yet connected)')
+  await active.sendText(jid, text)
+}

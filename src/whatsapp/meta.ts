@@ -219,5 +219,9 @@ export function createMetaClient(): WhatsAppClient {
     onMessage(handler) {
       msgHandler = handler
     },
+
+    async sendText(jid, text) {
+      await sendTextMessage(jid, text)
+    },
   }
 }

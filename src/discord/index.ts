@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, Partials, ChannelType } from 'discord.js'
 import { DISCORD_ENABLED, DISCORD_BOT_TOKEN } from '../config.js'
 import { logger } from '../logger.js'
-import { handleDiscordMessage } from './handler.js'
+import { handleDiscordMessage, chunkForDiscord } from './handler.js'
 import type { DiscordClient, DiscordMessageHandler } from './types.js'
 
 let active: DiscordClient | null = null
@@ -75,6 +75,13 @@ function createClient(): DiscordClient {
       }
       client = null
     },
+    async sendDirect(userId, text) {
+      if (!client) throw new Error('discord client not logged in')
+      const user = await client.users.fetch(userId)
+      for (const chunk of chunkForDiscord(text)) {
+        await user.send(chunk)
+      }
+    },
   }
 }
 
@@ -113,4 +120,12 @@ export async function stopDiscord(): Promise<void> {
     /* ignore */
   }
   active = null
+}
+
+// Non-reply outbound send (scheduler, cross-channel routing). Throws if
+// the gateway is disabled or not yet logged in; the caller decides how to
+// surface that — scheduled tasks wrap it in their own error handler.
+export async function sendToDiscordUser(userId: string, text: string): Promise<void> {
+  if (!active) throw new Error('Discord client not available (disabled or not yet connected)')
+  await active.sendDirect(userId, text)
 }

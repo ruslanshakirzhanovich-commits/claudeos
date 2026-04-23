@@ -24,6 +24,7 @@ import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
 import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
 import { initDiscord, stopDiscord } from './discord/index.js'
+import { createChannelRouter } from './channel-router.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
 import { recordCrash } from './metrics.js'
@@ -123,7 +124,10 @@ async function main(): Promise<void> {
 
   const bot = createBot()
   void publishBotCommands(bot)
-  const schedulerTimer = initScheduler(async (chatId, text) => sendToChat(chatId, text))
+  // Route scheduler sends by chat_id prefix → Telegram / Discord / WhatsApp.
+  // Previously hard-wired to sendToChat (Telegram), so scheduled tasks
+  // for Discord/WhatsApp chats silently failed at delivery time.
+  const schedulerTimer = initScheduler(createChannelRouter())
 
   initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
   initDiscord().catch((err) => logger.error({ err }, 'Discord init failed (continuing without)'))
