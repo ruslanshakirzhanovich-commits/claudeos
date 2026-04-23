@@ -237,6 +237,29 @@ export function insertMemory(
   return Number(info.lastInsertRowid)
 }
 
+export interface MemoryInput {
+  chatId: string
+  content: string
+  sector: 'semantic' | 'episodic'
+  topicKey?: string | null
+}
+
+export function insertMemories(rows: MemoryInput[]): void {
+  if (rows.length === 0) return
+  const db = getDb()
+  const stmt = db.prepare(
+    `INSERT INTO memories (chat_id, topic_key, content, sector, salience, created_at, accessed_at)
+     VALUES (?, ?, ?, ?, 1.0, ?, ?)`,
+  )
+  const tx = db.transaction((items: MemoryInput[]) => {
+    const now = Date.now()
+    for (const r of items) {
+      stmt.run(r.chatId, r.topicKey ?? null, r.content, r.sector, now, now)
+    }
+  })
+  tx(rows)
+}
+
 export function searchMemoriesFts(chatId: string, query: string, limit = 3): MemoryRow[] {
   if (!query) return []
   try {
@@ -272,14 +295,32 @@ export function touchMemory(id: number): void {
     .run(Date.now(), id)
 }
 
+export function touchMemories(ids: number[]): void {
+  if (ids.length === 0) return
+  const db = getDb()
+  const stmt = db.prepare(
+    `UPDATE memories
+     SET accessed_at = ?, salience = MIN(salience + 0.1, 5.0)
+     WHERE id = ?`,
+  )
+  const tx = db.transaction((rowIds: number[]) => {
+    const now = Date.now()
+    for (const id of rowIds) stmt.run(now, id)
+  })
+  tx(ids)
+}
+
 export function decayMemories(): { decayed: number; deleted: number } {
   const db = getDb()
   const cutoff = Date.now() - 24 * 60 * 60 * 1000
-  const decayInfo = db
-    .prepare('UPDATE memories SET salience = salience * 0.98 WHERE created_at < ?')
-    .run(cutoff)
-  const delInfo = db.prepare('DELETE FROM memories WHERE salience < 0.1').run()
-  return { decayed: Number(decayInfo.changes), deleted: Number(delInfo.changes) }
+  const updateStmt = db.prepare('UPDATE memories SET salience = salience * 0.98 WHERE created_at < ?')
+  const deleteStmt = db.prepare('DELETE FROM memories WHERE salience < 0.1')
+  const tx = db.transaction(() => {
+    const decayInfo = updateStmt.run(cutoff)
+    const delInfo = deleteStmt.run()
+    return { decayed: Number(decayInfo.changes), deleted: Number(delInfo.changes) }
+  })
+  return tx()
 }
 
 export function optimizeFts(): void {

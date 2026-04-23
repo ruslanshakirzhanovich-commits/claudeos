@@ -1,10 +1,11 @@
 import {
-  insertMemory,
+  insertMemories,
   searchMemoriesFts,
   getRecentMemories,
-  touchMemory,
+  touchMemories,
   decayMemories,
   optimizeFts,
+  type MemoryInput,
   type MemoryRow,
 } from './db.js'
 import { logger } from './logger.js'
@@ -36,7 +37,7 @@ export async function buildMemoryContext(chatId: string, userMessage: string): P
 
   if (!all.length) return ''
 
-  for (const m of all) touchMemory(m.id)
+  touchMemories(all.map((m) => m.id))
 
   const lines = all.map((m) => `- ${m.content} (${m.sector})`)
   return [
@@ -56,13 +57,22 @@ export async function saveConversationTurn(
   assistantMsg: string,
 ): Promise<void> {
   try {
+    const rows: MemoryInput[] = []
     if (userMsg && userMsg.length > 20 && !userMsg.startsWith('/')) {
-      const sector = SEMANTIC_REGEX.test(userMsg) ? 'semantic' : 'episodic'
-      insertMemory(chatId, `User: ${userMsg.slice(0, 500)}`, sector)
+      rows.push({
+        chatId,
+        content: `User: ${userMsg.slice(0, 500)}`,
+        sector: SEMANTIC_REGEX.test(userMsg) ? 'semantic' : 'episodic',
+      })
     }
     if (assistantMsg && assistantMsg.length > 20) {
-      insertMemory(chatId, `Assistant: ${assistantMsg.slice(0, 500)}`, 'episodic')
+      rows.push({
+        chatId,
+        content: `Assistant: ${assistantMsg.slice(0, 500)}`,
+        sector: 'episodic',
+      })
     }
+    insertMemories(rows)
   } catch (err) {
     logger.warn({ err }, 'saveConversationTurn failed')
   }
