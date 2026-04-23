@@ -1,7 +1,7 @@
 import type { Bot } from 'grammy'
 import { InputFile } from 'grammy'
-import { isAdmin } from '../config.js'
-import { createAndVerifyBackup } from '../backup.js'
+import { isAdmin, BACKUP_KEEP } from '../config.js'
+import { createAndVerifyBackup, rotateBackups } from '../backup.js'
 import { logger } from '../logger.js'
 
 const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
@@ -22,9 +22,11 @@ export function registerBackup(bot: Bot): void {
         return
       }
       const { path: destPath, sizeBytes, verification: v } = result
+      const removed = rotateBackups(BACKUP_KEEP)
       const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2)
       const verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
-      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}`, { parse_mode: 'HTML' })
+      const rotatedLine = removed > 0 ? ` · pruned ${removed} old` : ''
+      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}${rotatedLine}`, { parse_mode: 'HTML' })
 
       if (sizeBytes <= TELEGRAM_FILE_LIMIT) {
         try {
