@@ -3,6 +3,7 @@ import path from 'node:path'
 import https from 'node:https'
 import { UPLOADS_DIR } from './config.js'
 import { logger } from './logger.js'
+import { wrapUntrusted } from './untrusted.js'
 
 export function ensureUploadsDir(): void {
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true })
@@ -75,13 +76,18 @@ export async function downloadMedia(
 }
 
 export function buildPhotoMessage(localPath: string, caption?: string): string {
-  const prefix = caption ? `${caption}\n\n` : ''
-  return `${prefix}[User sent a photo. Local path: ${localPath}. Read it with your vision tools or analyze as needed.]`
+  const captionBlock = caption
+    ? wrapUntrusted(caption, 'photo_caption') + '\n\n'
+    : ''
+  return `${captionBlock}[User sent a photo. Local path: ${localPath}. Read it with your vision tools or analyze as needed.]`
 }
 
 export function buildDocumentMessage(localPath: string, filename: string, caption?: string): string {
-  const prefix = caption ? `${caption}\n\n` : ''
-  return `${prefix}[User sent a document: ${filename}. Local path: ${localPath}. Read it with your file tools.]`
+  const captionBlock = caption
+    ? wrapUntrusted(caption, 'document_caption') + '\n\n'
+    : ''
+  const safeFilename = wrapUntrusted(filename, 'document_filename')
+  return `${captionBlock}[User sent a document. Local path: ${localPath}. Original filename (untrusted):\n${safeFilename}\nRead it with your file tools.]`
 }
 
 export function cleanupOldUploads(maxAgeMs: number = 24 * 60 * 60 * 1000): void {

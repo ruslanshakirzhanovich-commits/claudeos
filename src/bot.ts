@@ -41,6 +41,7 @@ import {
 } from './media.js'
 import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
+import { wrapUntrusted } from './untrusted.js'
 
 export function formatForTelegram(text: string): string {
   if (!text) return ''
@@ -502,9 +503,8 @@ export function createBot(): Bot {
         return
       }
       await ctx.reply(`Heard: "${transcript.slice(0, 200)}"`).catch(() => {})
-      await handleMessage(ctx, `[Voice transcribed]: ${transcript}`, {
-        forceVoice: true,
-      })
+      const wrapped = wrapUntrusted(transcript, 'voice_transcript', { source: 'groq-whisper' })
+      await handleMessage(ctx, wrapped, { forceVoice: true })
     } catch (err) {
       log.error({ err }, 'voice handler failed')
       await ctx.reply(`Voice error: ${(err as Error).message}`).catch(() => {})

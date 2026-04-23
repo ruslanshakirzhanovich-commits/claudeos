@@ -3,6 +3,7 @@ import { runAgent } from '../agent.js'
 import { getSession, setSession } from '../db.js'
 import { buildMemoryContext, saveConversationTurn } from '../memory.js'
 import { logger } from '../logger.js'
+import { wrapUntrusted } from '../untrusted.js'
 import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -27,7 +28,8 @@ export async function handleWhatsAppMessage(
 
   try {
     const memoryContext = await buildMemoryContext(jid, text)
-    const messageForAgent = memoryContext ? `${memoryContext}\n\n${text}` : text
+    const wrappedText = wrapUntrusted(text, 'whatsapp_message', { from: number })
+    const messageForAgent = memoryContext ? `${memoryContext}\n\n${wrappedText}` : wrappedText
 
     const sessionId = getSession(jid) ?? undefined
     // WhatsApp users are non-admin by design — no ADMIN_WHATSAPP_NUMBERS concept yet.
