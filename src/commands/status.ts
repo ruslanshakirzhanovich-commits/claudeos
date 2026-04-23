@@ -31,13 +31,17 @@ export function registerStatus(bot: Bot): void {
     const userId = ctx.from?.id
     const username = ctx.from?.username ?? ctx.from?.first_name ?? '?'
 
-    const authorised = isAuthorised(chatId)
+    if (!isAuthorised(chatId)) {
+      await ctx.reply('Not authorised.')
+      return
+    }
+
     const admin = isAdmin(chatId)
-    const sessionMeta = authorised ? getSessionMeta(chatId) : null
+    const sessionMeta = getSessionMeta(chatId)
     const tts = getTtsEnabled(chatId)
-    const memories = authorised ? countMemories(chatId) : 0
-    const perChatModel = authorised ? getPreferredModel(chatId) : null
-    const rawEffort = authorised ? getEffortLevel(chatId) : null
+    const memories = countMemories(chatId)
+    const perChatModel = getPreferredModel(chatId)
+    const rawEffort = getEffortLevel(chatId)
     const effort = isEffortLevel(rawEffort) ? rawEffort : null
     const { id: envModelId, explicit } = resolveActiveModel(CLAUDE_MODEL)
     const modelId = perChatModel ?? envModelId
@@ -46,7 +50,7 @@ export function registerStatus(bot: Bot): void {
       ? `${effortLabel(effort)} (/effort)`
       : `${effortLabel(CHAT_DEFAULT_EFFORT)} (default)`
     const caps = voiceCapabilities()
-    const role = !authorised ? 'unauthorised' : admin ? 'admin' : 'user'
+    const role = admin ? 'admin' : 'user'
     const permission = admin ? 'bypassPermissions' : 'plan'
 
     const sessionLine = sessionMeta
@@ -61,7 +65,7 @@ export function registerStatus(bot: Bot): void {
       .filter(Boolean)
       .join(' · ') || 'none'
 
-    const usage = authorised ? getUsage(chatId) : null
+    const usage = getUsage(chatId)
     // Hit rate: include raw input in the denominator. Non-cached fresh input
     // is still a miss. Matches openclaw's formatCacheLine.
     const cacheDenom = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
@@ -82,7 +86,7 @@ export function registerStatus(bot: Bot): void {
       `🤖 <b>ClaudeClaw</b> v${BOT_VERSION} (${BOT_COMMIT})`,
       `🧠 Model: <code>${modelId}</code> · ${modelSource}`,
       `⚡ Effort: ${effortLabelText}`,
-      `👤 Role: ${role}${role !== 'unauthorised' ? ` · ${permission}` : ''}${isOpenMode() ? ' · <b>OPEN MODE</b>' : ''}`,
+      `👤 Role: ${role} · ${permission}${admin && isOpenMode() ? ' · <b>OPEN MODE</b>' : ''}`,
       `🧵 Session: ${sessionLine}`,
       `🗄 Cache: ${cacheLine}`,
       `📚 Context: ${contextLine}`,
