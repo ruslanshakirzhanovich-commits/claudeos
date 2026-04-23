@@ -10,6 +10,7 @@ import {
   TTS_MAX_CHARS,
 } from './config.js'
 import { logger } from './logger.js'
+import { withRetry } from './retry.js'
 
 export function voiceCapabilities(): { stt: boolean; tts: boolean } {
   return {
@@ -132,7 +133,7 @@ export async function synthesizeSpeech(text: string): Promise<SynthesisResult> {
   const cleaned = stripMarkdownForSpeech(text)
   if (!cleaned) throw new Error('nothing to speak after stripping markdown')
   const { text: capped, truncated } = truncateForSpeech(cleaned)
-  const mp3 = await fetchElevenLabsMp3(capped)
+  const mp3 = await withRetry(() => fetchElevenLabsMp3(capped), { label: 'elevenlabs-tts' })
   const ogg = await mp3ToOggOpus(mp3)
   return { audio: ogg, truncated, spokenChars: capped.length }
 }
@@ -174,35 +175,39 @@ export async function transcribeAudio(filePath: string): Promise<string> {
 
   const body = Buffer.concat(parts)
 
-  const response: string = await new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: 'api.groq.com',
-        path: '/openai/v1/audio/transcriptions',
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': body.length,
-        },
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk) => chunks.push(chunk))
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf8')
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(raw)
-          } else {
-            reject(new Error(`Groq STT ${res.statusCode}: ${raw}`))
-          }
-        })
-      },
-    )
-    req.on('error', reject)
-    req.write(body)
-    req.end()
-  })
+  const response: string = await withRetry(
+    () =>
+      new Promise<string>((resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: 'api.groq.com',
+            path: '/openai/v1/audio/transcriptions',
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+              'Content-Length': body.length,
+            },
+          },
+          (res) => {
+            const chunks: Buffer[] = []
+            res.on('data', (chunk) => chunks.push(chunk))
+            res.on('end', () => {
+              const raw = Buffer.concat(chunks).toString('utf8')
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve(raw)
+              } else {
+                reject(new Error(`Groq STT ${res.statusCode}: ${raw}`))
+              }
+            })
+          },
+        )
+        req.on('error', reject)
+        req.write(body)
+        req.end()
+      }),
+    { label: 'groq-stt' },
+  )
 
   try {
     const parsed = JSON.parse(response) as { text?: string }

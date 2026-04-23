@@ -40,6 +40,7 @@ import {
   ensureUploadsDir,
 } from './media.js'
 import { logger } from './logger.js'
+import { withRetry, isTransientError } from './retry.js'
 
 export function formatForTelegram(text: string): string {
   if (!text) return ''
@@ -110,17 +111,21 @@ export function splitMessage(text: string, limit = MAX_MESSAGE_LENGTH): string[]
 
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
-    await ctx.reply('(no output)')
+    await withRetry(() => ctx.reply('(no output)'), { label: 'tg-reply-empty' }).catch(() => {})
     return
   }
   const formatted = formatForTelegram(text)
   for (const chunk of splitMessage(formatted)) {
     try {
-      await ctx.reply(chunk, { parse_mode: 'HTML' })
+      await withRetry(() => ctx.reply(chunk, { parse_mode: 'HTML' }), { label: 'tg-reply-html' })
     } catch (err) {
+      if (isTransientError(err)) {
+        logger.error({ err }, 'HTML send exhausted retries')
+        continue
+      }
       logger.warn({ err }, 'HTML send failed, falling back to plain text')
       try {
-        await ctx.reply(chunk)
+        await withRetry(() => ctx.reply(chunk), { label: 'tg-reply-plain' })
       } catch (err2) {
         logger.error({ err: err2 }, 'plain text send failed too')
       }
@@ -572,9 +577,23 @@ export async function sendToChat(chatId: string, text: string): Promise<void> {
   const formatted = formatForTelegram(text)
   for (const chunk of splitMessage(formatted)) {
     try {
-      await tmpBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' })
-    } catch {
-      await tmpBot.api.sendMessage(chatId, chunk).catch(() => {})
+      await withRetry(
+        () => tmpBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' }),
+        { label: 'tg-send-html' },
+      )
+    } catch (err) {
+      if (isTransientError(err)) {
+        logger.error({ err, chatId }, 'sendToChat HTML exhausted retries')
+        continue
+      }
+      try {
+        await withRetry(
+          () => tmpBot.api.sendMessage(chatId, chunk),
+          { label: 'tg-send-plain' },
+        )
+      } catch (err2) {
+        logger.error({ err: err2, chatId }, 'sendToChat plain failed')
+      }
     }
   }
 }

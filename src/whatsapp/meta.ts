@@ -10,6 +10,7 @@ import {
   WHATSAPP_META_WEBHOOK_PATH,
 } from '../config.js'
 import { logger } from '../logger.js'
+import { withRetry } from '../retry.js'
 import type { WhatsAppClient, WhatsAppMessage, WhatsAppMessageHandler, WhatsAppSendReply } from './types.js'
 
 interface MetaMessageValue {
@@ -82,19 +83,22 @@ async function sendTextMessage(toJid: string, text: string): Promise<void> {
     text: { body: text },
   })
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_META_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body,
-  })
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`Meta send ${res.status}: ${errText.slice(0, 300)}`)
-  }
+  await withRetry(async () => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    })
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      const err = new Error(`Meta send ${res.status}: ${errText.slice(0, 300)}`)
+      ;(err as Error & { status?: number }).status = res.status
+      throw err
+    }
+  }, { label: 'meta-whatsapp-send' })
 }
 
 function readBody(req: http.IncomingMessage, limitBytes = 1024 * 1024): Promise<Buffer> {
