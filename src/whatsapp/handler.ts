@@ -38,7 +38,7 @@ export async function handleWhatsAppMessage(
     const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
     // WhatsApp users are non-admin by design — no ADMIN_WHATSAPP_NUMBERS concept yet.
     // They get `plan` mode: Claude can read/reason, cannot execute shell or edit files.
-    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan', log, model, effort })
+    const { text: reply, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode: 'plan', log, model, effort, chatId: jid })
 
     if (newSessionId && newSessionId !== sessionId) setSession(jid, newSessionId)
 

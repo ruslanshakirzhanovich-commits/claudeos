@@ -5,7 +5,14 @@ import { isEffortLevel, effortLabel, CHAT_DEFAULT_EFFORT } from '../effort.js'
 import { voiceCapabilities } from '../voice.js'
 import { inflightCount } from '../inflight.js'
 import { BOT_VERSION, BOT_COMMIT } from '../version.js'
+import { getUsage } from '../usage.js'
 import { resolveActiveModel } from './models.js'
+
+function fmtCount(n: number): string {
+  if (n < 1_000) return String(n)
+  if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}k`
+  return `${(n / 1_000_000).toFixed(2)}m`
+}
 
 function formatAgo(ts: number): string {
   const sec = Math.floor((Date.now() - ts) / 1000)
@@ -54,13 +61,28 @@ export function registerStatus(bot: Bot): void {
       .filter(Boolean)
       .join(' · ') || 'none'
 
+    const usage = authorised ? getUsage(chatId) : null
+    const cacheTotal = usage ? usage.cacheReadTokens + usage.cacheCreateTokens : 0
+    const hitPct = cacheTotal > 0 ? Math.round((usage!.cacheReadTokens / cacheTotal) * 100) : null
+    const cacheLine = usage
+      ? `${hitPct === null ? '—' : `${hitPct}% hit`} · ${fmtCount(usage.cacheReadTokens)} cached, ${fmtCount(usage.cacheCreateTokens)} new`
+      : '(no turns yet)'
+    const ctxUsed = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
+    const ctxMax = usage?.contextWindow ?? 0
+    const ctxPct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0
+    const contextLine = ctxMax > 0
+      ? `${fmtCount(ctxUsed)}/${fmtCount(ctxMax)} (${ctxPct}%) · 🧹 Compactions: ${usage!.compactions}`
+      : '(no turns yet)'
+
     const lines = [
       `🤖 <b>ClaudeClaw</b> v${BOT_VERSION} (${BOT_COMMIT})`,
       `🧠 Model: <code>${modelId}</code> · ${modelSource}`,
       `⚡ Effort: ${effortLabelText}`,
       `👤 Role: ${role}${role !== 'unauthorised' ? ` · ${permission}` : ''}${isOpenMode() ? ' · <b>OPEN MODE</b>' : ''}`,
       `🧵 Session: ${sessionLine}`,
-      `📚 Memories: ${memories} for this chat`,
+      `🗄 Cache: ${cacheLine}`,
+      `📚 Context: ${contextLine}`,
+      `🧠 Memories: ${memories} for this chat`,
       `🗣 Voice: ${voiceLine}`,
       `🌐 Bot features: ${featuresLine}`,
       `⏳ Inflight agents: ${inflightCount()}`,

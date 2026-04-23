@@ -5,6 +5,7 @@ import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
 import { recordEvent } from './metrics.js'
 import { effortToThinkingTokens, isEffortLevel } from './effort.js'
+import { recordUsage, recordCompaction } from './usage.js'
 
 export interface AgentResult {
   text: string | null
@@ -20,6 +21,7 @@ export interface RunAgentOptions {
   log?: Logger
   model?: string
   effort?: string
+  chatId?: string
 }
 
 function loadClaudeMd(): string {
@@ -60,7 +62,7 @@ async function runAgentInner(
   message: string,
   opts: RunAgentOptions,
 ): Promise<AgentResult> {
-  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model, effort } = opts
+  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model, effort, chatId } = opts
   const effectiveModel = model || CLAUDE_MODEL || undefined
   const wrapped = wrapWithClaudeMd(message, effectiveModel)
   const effectiveEffort = isEffortLevel(effort) ? effort : undefined
@@ -85,9 +87,33 @@ async function runAgentInner(
     for await (const event of stream as AsyncIterable<any>) {
       if (event?.type === 'system' && event?.subtype === 'init' && event?.session_id) {
         newSessionId = event.session_id
+      } else if (event?.type === 'system' && event?.subtype === 'compact_boundary') {
+        if (chatId) recordCompaction(chatId)
       } else if (event?.type === 'result') {
         text = typeof event.result === 'string' ? event.result : (event.result?.result ?? null)
         if (!newSessionId && event.session_id) newSessionId = event.session_id
+        if (chatId && event.modelUsage) {
+          const entries = Object.values(event.modelUsage) as Array<{
+            inputTokens: number
+            outputTokens: number
+            cacheReadInputTokens: number
+            cacheCreationInputTokens: number
+            contextWindow: number
+          }>
+          if (entries.length > 0) {
+            const agg = entries.reduce(
+              (a, b) => ({
+                inputTokens: a.inputTokens + b.inputTokens,
+                outputTokens: a.outputTokens + b.outputTokens,
+                cacheReadInputTokens: a.cacheReadInputTokens + b.cacheReadInputTokens,
+                cacheCreationInputTokens: a.cacheCreationInputTokens + b.cacheCreationInputTokens,
+                contextWindow: Math.max(a.contextWindow, b.contextWindow),
+              }),
+              { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, contextWindow: 0 },
+            )
+            recordUsage(chatId, agg)
+          }
+        }
       }
     }
   } catch (err) {

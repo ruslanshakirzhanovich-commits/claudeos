@@ -52,6 +52,7 @@ import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { wrapUntrusted } from './untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from './effort.js'
+import { resetUsage } from './usage.js'
 
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
@@ -135,7 +136,7 @@ async function handleMessage(
     const model = getPreferredModel(chatId) ?? undefined
     const storedEffort = getEffortLevel(chatId)
     const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
-    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model, effort })
+    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model, effort, chatId })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 
@@ -197,6 +198,7 @@ export function createBot(): Bot {
     const chatId = String(ctx.chat?.id ?? '')
     if (!isAuthorised(chatId)) return
     clearSession(chatId)
+    resetUsage(chatId)
     await ctx.reply('Session cleared. Starting fresh.')
   })
 

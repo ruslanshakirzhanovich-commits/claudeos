@@ -1,6 +1,7 @@
 import type { Bot } from 'grammy'
 import { InlineKeyboard } from 'grammy'
 import { isAuthorised, getPreferredModel, setPreferredModel, clearSession } from '../db.js'
+import { resetUsage } from '../usage.js'
 import { CLAUDE_MODEL } from '../config.js'
 
 interface ModelEntry {
@@ -111,7 +112,10 @@ export function registerModels(bot: Bot): void {
     // Resumed sessions stick to the original model; start a fresh one
     // so the next turn actually uses the new model.
     const newChoice = choice === DEFAULT_CHOICE ? null : choice
-    if (previous !== newChoice) clearSession(chatId)
+    if (previous !== newChoice) {
+      clearSession(chatId)
+      resetUsage(chatId)
+    }
     const active = getPreferredModel(chatId)
     const text = [
       '<b>Model for this chat</b>',
