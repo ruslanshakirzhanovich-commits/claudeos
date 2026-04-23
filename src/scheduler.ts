@@ -84,9 +84,30 @@ export async function runDueTasks(send: Sender): Promise<void> {
   }
 }
 
+export function nonOverlapping<A extends unknown[]>(
+  fn: (...args: A) => Promise<void>,
+  onSkip?: () => void,
+): (...args: A) => void {
+  let running = false
+  return (...args: A) => {
+    if (running) {
+      onSkip?.()
+      return
+    }
+    running = true
+    fn(...args)
+      .catch((err) => logger.error({ err }, 'nonOverlapping task crashed'))
+      .finally(() => {
+        running = false
+      })
+  }
+}
+
 export function initScheduler(send: Sender): NodeJS.Timeout {
   logger.info('scheduler started')
-  return setInterval(() => {
-    runDueTasks(send).catch((err) => logger.error({ err }, 'runDueTasks crashed'))
-  }, SCHEDULER_POLL_MS)
+  const tick = nonOverlapping(
+    () => runDueTasks(send),
+    () => logger.debug('scheduler tick skipped — previous run still in flight'),
+  )
+  return setInterval(tick, SCHEDULER_POLL_MS)
 }
