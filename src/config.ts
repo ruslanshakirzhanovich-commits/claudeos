@@ -72,6 +72,15 @@ export const EFFORT_TOKENS_MEDIUM = readPositiveInt('EFFORT_TOKENS_MEDIUM', 8_19
 export const EFFORT_TOKENS_HIGH = readPositiveInt('EFFORT_TOKENS_HIGH', 24_576)
 export const EFFORT_TOKENS_XHIGH = readPositiveInt('EFFORT_TOKENS_XHIGH', 65_536)
 
+// Per-chat rate limit (token bucket). Defaults: 10-message burst, then
+// one message every 6 seconds sustained (10/min). Set capacity=0 to
+// disable entirely.
+export const RATE_LIMIT_CAPACITY = Math.max(
+  0,
+  Number(env['RATE_LIMIT_CAPACITY'] ?? '10') || 10,
+)
+export const RATE_LIMIT_REFILL_PER_MIN = readPositiveInt('RATE_LIMIT_REFILL_PER_MIN', 10)
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)

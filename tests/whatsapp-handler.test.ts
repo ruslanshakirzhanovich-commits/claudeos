@@ -8,6 +8,8 @@ vi.mock('../src/config.js', () => ({
   EFFORT_TOKENS_MEDIUM: 8192,
   EFFORT_TOKENS_HIGH: 24576,
   EFFORT_TOKENS_XHIGH: 65536,
+  RATE_LIMIT_CAPACITY: 10,
+  RATE_LIMIT_REFILL_PER_MIN: 10,
 }))
 
 const runAgentSpy = vi.fn()
@@ -34,11 +36,13 @@ vi.mock('../src/logger.js', () => {
 })
 
 const { handleWhatsAppMessage } = await import('../src/whatsapp/handler.js')
+const { resetRateLimitForTest } = await import('../src/rate-limit.js')
 
 const JID = '15551234567@s.whatsapp.net'
 
 beforeEach(() => {
   runAgentSpy.mockReset()
+  resetRateLimitForTest()
 })
 
 describe('handleWhatsAppMessage', () => {

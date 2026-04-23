@@ -51,6 +51,7 @@ import { withRetry, isTransientError } from './retry.js'
 import { wrapUntrusted } from './untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from './effort.js'
 import { resetUsage } from './usage.js'
+import { tryConsume, rateLimitMessage } from './rate-limit.js'
 
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
@@ -110,6 +111,13 @@ async function handleMessage(
 
   if (!isAuthorised(chatId)) {
     log.warn('unauthorised chat')
+    return
+  }
+
+  const rl = tryConsume(chatId)
+  if (!rl.ok) {
+    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
+    await ctx.reply(rateLimitMessage(rl.retryAfterMs)).catch(() => {})
     return
   }
 

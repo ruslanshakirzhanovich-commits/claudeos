@@ -6,6 +6,7 @@ import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
 import { splitMessage } from '../format.js'
+import { tryConsume, rateLimitMessage } from '../rate-limit.js'
 import type { DiscordIncomingMessage, DiscordSendReply } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
@@ -34,9 +35,19 @@ export async function handleDiscordMessage(
     return
   }
 
-  log.info({ preview: msg.text.slice(0, 80) }, 'message received')
-
   const chatId = chatIdForDiscordUser(msg.userId)
+  const rl = tryConsume(chatId)
+  if (!rl.ok) {
+    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
+    try {
+      await send(msg.channelId, rateLimitMessage(rl.retryAfterMs))
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+
+  log.info({ preview: msg.text.slice(0, 80) }, 'message received')
   try {
     const memoryContext = await buildMemoryContext(chatId, msg.text)
     const wrappedText = wrapUntrusted(msg.text, 'discord_message', { from: msg.authorTag })

@@ -6,6 +6,7 @@ import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from '../effort.js'
 import { splitMessage } from '../format.js'
+import { tryConsume, rateLimitMessage } from '../rate-limit.js'
 import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -23,6 +24,17 @@ export async function handleWhatsAppMessage(
   const number = jid.split('@')[0] ?? ''
   if (!isWhatsAppAuthorised(number)) {
     log.warn({ number }, 'unauthorised whatsapp sender')
+    return
+  }
+
+  const rl = tryConsume(jid)
+  if (!rl.ok) {
+    log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
+    try {
+      await send(jid, rateLimitMessage(rl.retryAfterMs))
+    } catch {
+      /* ignore */
+    }
     return
   }
 

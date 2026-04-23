@@ -13,6 +13,9 @@ vi.mock('../src/config.js', () => ({
   EFFORT_TOKENS_MEDIUM: 8192,
   EFFORT_TOKENS_HIGH: 24576,
   EFFORT_TOKENS_XHIGH: 65536,
+  // Rate limit constants pulled by src/rate-limit.ts.
+  RATE_LIMIT_CAPACITY: 10,
+  RATE_LIMIT_REFILL_PER_MIN: 10,
 }))
 
 let allowlist: string[] | null = null
@@ -60,10 +63,13 @@ function makeMsg(over: Partial<Parameters<typeof handleDiscordMessage>[0]> = {})
   }
 }
 
+const { resetRateLimitForTest } = await import('../src/rate-limit.js')
+
 beforeEach(() => {
   runAgentSpy.mockReset()
   setSessionSpy.mockReset()
   setAllowlist(null) // open mode by default
+  resetRateLimitForTest()
 })
 
 describe('chatIdForDiscordUser', () => {
