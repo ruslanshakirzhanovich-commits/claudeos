@@ -5,9 +5,11 @@ import {
   touchMemories,
   decayMemories,
   optimizeFts,
+  capEpisodicMemories,
   type MemoryInput,
   type MemoryRow,
 } from './db.js'
+import { MEMORY_EPISODIC_CAP_PER_CHAT } from './config.js'
 import { logger } from './logger.js'
 
 const SEMANTIC_REGEX = /\b(my|i am|i'm|i prefer|remember|always|never|i like|i love|i hate|my name)\b/i
@@ -81,12 +83,18 @@ export async function saveConversationTurn(
 export function runDecaySweep(): void {
   try {
     const { decayed, deleted } = decayMemories()
+    let capped = 0
+    try {
+      capped = capEpisodicMemories(MEMORY_EPISODIC_CAP_PER_CHAT).deleted
+    } catch (err) {
+      logger.warn({ err }, 'episodic cap sweep failed')
+    }
     try {
       optimizeFts()
     } catch (err) {
       logger.warn({ err }, 'FTS5 incremental merge failed')
     }
-    logger.info({ decayed, deleted }, 'memory decay sweep complete')
+    logger.info({ decayed, deleted, capped }, 'memory decay sweep complete')
   } catch (err) {
     logger.warn({ err }, 'memory decay sweep failed')
   }

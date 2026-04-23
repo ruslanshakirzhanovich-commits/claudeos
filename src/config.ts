@@ -81,6 +81,15 @@ export const RATE_LIMIT_CAPACITY = Math.max(
 )
 export const RATE_LIMIT_REFILL_PER_MIN = readPositiveInt('RATE_LIMIT_REFILL_PER_MIN', 10)
 
+// Hard cap on how many episodic memories we keep per chat. Prevents the
+// DB from growing linearly for the lifetime of the agent. Semantic
+// memories are never capped here — they're load-bearing for user
+// profile. Set to 0 to disable the cap.
+export const MEMORY_EPISODIC_CAP_PER_CHAT = Math.max(
+  0,
+  Number(env['MEMORY_EPISODIC_CAP_PER_CHAT'] ?? '1000') || 1000,
+)
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)

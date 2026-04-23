@@ -420,6 +420,33 @@ export function optimizeFts(): void {
   db.exec(`INSERT INTO memories_fts(memories_fts, rank) VALUES('merge', -16)`)
 }
 
+// Keep at most `cap` episodic memories per chat. Drops the oldest by
+// accessed_at so the active conversation's context survives even after
+// a long idle period. Semantic memories are never touched — they carry
+// long-lived user profile facts that aren't supposed to age out.
+// Returns how many rows were deleted across all chats. cap <= 0 is a
+// no-op so the feature can be disabled via env.
+export function capEpisodicMemories(cap: number): { deleted: number } {
+  if (cap <= 0) return { deleted: 0 }
+  const db = getDb()
+  const stmt = db.prepare(
+    `DELETE FROM memories
+       WHERE id IN (
+         SELECT id FROM (
+           SELECT id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY chat_id ORDER BY accessed_at DESC
+                  ) AS rn
+             FROM memories
+            WHERE sector = 'episodic'
+         )
+         WHERE rn > ?
+       )`,
+  )
+  const info = stmt.run(cap)
+  return { deleted: Number(info.changes) }
+}
+
 export function countMemories(chatId?: string): number {
   const row = chatId
     ? (getDb()
