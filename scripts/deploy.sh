@@ -35,7 +35,8 @@ if [ "${CLAUDECLAW_SKIP_SUDO_CHECK:-}" != "1" ]; then
   if ! sudo -n systemctl show "${SERVICE_NAME}" --property=LoadState > /dev/null 2>&1; then
     echo "!! sudo -n systemctl fails — passwordless sudo required to restart ${SERVICE_NAME}." >&2
     echo "   Configure /etc/sudoers.d/claudeclaw, e.g.:" >&2
-    echo "     claw ALL=(root) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl status ${SERVICE_NAME}, /bin/systemctl show ${SERVICE_NAME}" >&2
+    SYSTEMCTL="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
+    echo "     claw ALL=(root) NOPASSWD: ${SYSTEMCTL} restart ${SERVICE_NAME}, ${SYSTEMCTL} status ${SERVICE_NAME}, ${SYSTEMCTL} show ${SERVICE_NAME}" >&2
     echo "   Or set CLAUDECLAW_SKIP_SUDO_CHECK=1 if restart happens out-of-band." >&2
     exit 1
   fi
