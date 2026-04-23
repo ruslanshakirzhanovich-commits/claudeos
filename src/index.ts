@@ -1,6 +1,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, ADMIN_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
+import {
+  PROJECT_ROOT,
+  PID_FILE,
+  STORE_DIR,
+  TELEGRAM_BOT_TOKEN,
+  DECAY_INTERVAL_MS,
+  ALLOWED_CHAT_IDS,
+  ADMIN_CHAT_IDS,
+  PREVIEW_ENABLED,
+  PREVIEW_PORT,
+  BACKUP_SCHEDULE_ENABLED,
+  BACKUP_INTERVAL_HOURS,
+  BACKUP_KEEP,
+} from './config.js'
 import { initDatabase, seedAllowedChatsFromEnv, isOpenMode } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
@@ -10,6 +23,7 @@ import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
 import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
 import { waitForInflight, inflightCount } from './inflight.js'
+import { initBackupSchedule } from './backup.js'
 
 const INFLIGHT_DRAIN_TIMEOUT_MS = 30_000
 
@@ -111,6 +125,13 @@ async function main(): Promise<void> {
 
   const previewServer = PREVIEW_ENABLED ? createPreviewServer(PREVIEW_PORT) : null
 
+  const backupTimer = BACKUP_SCHEDULE_ENABLED
+    ? initBackupSchedule(BACKUP_INTERVAL_HOURS, BACKUP_KEEP)
+    : null
+  if (!BACKUP_SCHEDULE_ENABLED) {
+    logger.warn('BACKUP_SCHEDULE_ENABLED=0 — automatic backups disabled')
+  }
+
   let shuttingDown = false
   const shutdown = async (signal: string) => {
     if (shuttingDown) return
@@ -118,6 +139,7 @@ async function main(): Promise<void> {
     logger.info({ signal, inflight: inflightCount() }, 'shutting down')
     clearInterval(decayTimer)
     clearInterval(schedulerTimer)
+    if (backupTimer) clearInterval(backupTimer)
     try {
       await bot.stop()
     } catch {

@@ -22,12 +22,11 @@ import {
   addAllowedChat,
   removeAllowedChat,
   countAllowedChats,
-  backupDatabase,
   getBotStats,
   touchAllowedChat,
   getSchemaVersion,
-  verifyBackup,
 } from './db.js'
+import { createAndVerifyBackup } from './backup.js'
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import {
   transcribeAudio,
@@ -402,27 +401,20 @@ export function createBot(): Bot {
       return
     }
     try {
-      const backupsDir = path.join(STORE_DIR, 'backups')
-      if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true })
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const destPath = path.join(backupsDir, `claudeclaw-${stamp}.db`)
-      backupDatabase(destPath)
-      const size = fs.statSync(destPath).size
-      const sizeMb = (size / (1024 * 1024)).toFixed(2)
-
-      let verifyLine = ''
+      let result
       try {
-        const v = verifyBackup(destPath)
-        verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
+        result = createAndVerifyBackup()
       } catch (err) {
-        await ctx.reply(`Backup saved but failed verification: ${(err as Error).message.slice(0, 200)}`)
+        await ctx.reply(`Backup failed verification: ${(err as Error).message.slice(0, 200)}`)
         return
       }
-
+      const { path: destPath, sizeBytes, verification: v } = result
+      const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2)
+      const verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
       await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}`, { parse_mode: 'HTML' })
 
       const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
-      if (size <= TELEGRAM_FILE_LIMIT) {
+      if (sizeBytes <= TELEGRAM_FILE_LIMIT) {
         try {
           await ctx.replyWithDocument(new InputFile(destPath))
         } catch (err) {

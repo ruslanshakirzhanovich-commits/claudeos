@@ -50,6 +50,10 @@ export function isAdmin(chatId: number | string): boolean {
   return ADMIN_CHAT_IDS.includes(String(chatId))
 }
 
+export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
+export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
+export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)
+
 export const PREVIEW_ENABLED = (env['PREVIEW_ENABLED'] ?? '').trim() === '1'
 export const PREVIEW_PORT = Number(env['PREVIEW_PORT'] ?? '8080') || 8080
 export const PREVIEW_HOST = (env['PREVIEW_HOST'] ?? '').trim()
