@@ -85,6 +85,24 @@ export const PREVIEW_PASSWORD = (env['PREVIEW_PASSWORD'] ?? '').trim()
 export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'
 export const WHATSAPP_PROVIDER = (env['WHATSAPP_PROVIDER'] ?? 'baileys').trim()
 
+export const DISCORD_ENABLED = (env['DISCORD_ENABLED'] ?? '').trim() === '1'
+export const DISCORD_BOT_TOKEN = (env['DISCORD_BOT_TOKEN'] ?? '').trim()
+
+const rawDiscord = env['ALLOWED_DISCORD_USERS'] ?? ''
+export const ALLOWED_DISCORD_USERS: readonly string[] = rawDiscord
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+export function isDiscordUserAuthorisedOf(allowed: readonly string[], userId: string): boolean {
+  if (allowed.length === 0) return true
+  return allowed.includes(userId)
+}
+
+export function isDiscordUserAuthorised(userId: string): boolean {
+  return isDiscordUserAuthorisedOf(ALLOWED_DISCORD_USERS, userId)
+}
+
 export const WHATSAPP_META_ACCESS_TOKEN = env['WHATSAPP_META_ACCESS_TOKEN'] ?? ''
 export const WHATSAPP_META_PHONE_NUMBER_ID = env['WHATSAPP_META_PHONE_NUMBER_ID'] ?? ''
 export const WHATSAPP_META_VERIFY_TOKEN = env['WHATSAPP_META_VERIFY_TOKEN'] ?? ''

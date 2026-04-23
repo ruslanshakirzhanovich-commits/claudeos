@@ -1,0 +1,104 @@
+import { Client, Events, GatewayIntentBits, Partials, ChannelType } from 'discord.js'
+import { DISCORD_ENABLED, DISCORD_BOT_TOKEN } from '../config.js'
+import { logger } from '../logger.js'
+import { handleDiscordMessage } from './handler.js'
+import type { DiscordClient, DiscordMessageHandler } from './types.js'
+
+let active: DiscordClient | null = null
+
+function createClient(): DiscordClient {
+  let client: Client | null = null
+  let handler: DiscordMessageHandler | null = null
+
+  return {
+    onMessage(h: DiscordMessageHandler) {
+      handler = h
+    },
+    async start() {
+      client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.DirectMessages,
+          GatewayIntentBits.MessageContent,
+        ],
+        // DMChannel arrives as a partial on first contact — without these,
+        // the messageCreate event fires with `channel.type` undefined.
+        partials: [Partials.Channel, Partials.Message],
+      })
+
+      client.on(Events.ClientReady, (c) => {
+        logger.info({ tag: c.user.tag }, 'discord: ready')
+      })
+
+      client.on(Events.MessageCreate, async (m) => {
+        if (m.author.bot) return
+        if (!handler) return
+        if (!m.content) return
+        try {
+          await handler(
+            {
+              userId: m.author.id,
+              channelId: m.channelId,
+              text: m.content,
+              isDM: m.channel.type === ChannelType.DM,
+              messageId: m.id,
+              authorTag: m.author.tag,
+            },
+            async (channelId: string, text: string) => {
+              if (!client) return
+              const ch = await client.channels.fetch(channelId)
+              if (ch && 'send' in ch && typeof (ch as { send?: unknown }).send === 'function') {
+                await (ch as { send: (t: string) => Promise<unknown> }).send(text)
+              }
+            },
+          )
+        } catch (err) {
+          logger.error({ err }, 'discord handler crashed')
+        }
+      })
+
+      client.on(Events.Error, (err) => {
+        logger.error({ err }, 'discord client error')
+      })
+
+      await client.login(DISCORD_BOT_TOKEN)
+    },
+    async stop() {
+      try {
+        await client?.destroy()
+      } catch {
+        /* ignore */
+      }
+      client = null
+    },
+  }
+}
+
+export async function initDiscord(): Promise<DiscordClient | null> {
+  if (!DISCORD_ENABLED) {
+    logger.debug('Discord disabled (DISCORD_ENABLED != 1)')
+    return null
+  }
+  if (!DISCORD_BOT_TOKEN) {
+    logger.warn('DISCORD_ENABLED=1 but DISCORD_BOT_TOKEN missing — skipping Discord init')
+    return null
+  }
+
+  const client = createClient()
+  client.onMessage(handleDiscordMessage)
+  await client.start()
+  active = client
+  logger.info('Discord client started')
+  return client
+}
+
+export async function stopDiscord(): Promise<void> {
+  if (!active) return
+  try {
+    await active.stop()
+  } catch {
+    /* ignore */
+  }
+  active = null
+}

@@ -23,6 +23,7 @@ import { runDecaySweep } from './memory.js'
 import { cleanupOldUploads, ensureUploadsDir } from './media.js'
 import { initScheduler } from './scheduler.js'
 import { initWhatsApp, stopWhatsApp } from './whatsapp/index.js'
+import { initDiscord, stopDiscord } from './discord/index.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
 import { recordCrash } from './metrics.js'
@@ -125,6 +126,7 @@ async function main(): Promise<void> {
   const schedulerTimer = initScheduler(async (chatId, text) => sendToChat(chatId, text))
 
   initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
+  initDiscord().catch((err) => logger.error({ err }, 'Discord init failed (continuing without)'))
 
   const previewServer = PREVIEW_ENABLED ? createPreviewServer(PREVIEW_PORT) : null
 
@@ -149,6 +151,7 @@ async function main(): Promise<void> {
       /* ignore */
     }
     await stopWhatsApp()
+    await stopDiscord()
     const remaining = await waitForInflight(INFLIGHT_DRAIN_TIMEOUT_MS)
     if (remaining > 0) {
       logger.warn({ remaining }, 'exiting with inflight work still running')
