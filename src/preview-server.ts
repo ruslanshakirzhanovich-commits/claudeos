@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import http from 'node:http'
-import { WORKSPACE_DIR, PREVIEW_USER, PREVIEW_PASSWORD } from './config.js'
+import { WORKSPACE_DIR, PREVIEW_USER, PREVIEW_PASSWORD, PREVIEW_HOST, resolvePreviewBind } from './config.js'
 import { logger } from './logger.js'
 
 const PREVIEWS_DIR = path.join(WORKSPACE_DIR, 'previews')
@@ -137,13 +137,14 @@ function serveFile(res: http.ServerResponse, filePath: string): void {
 
 export function createPreviewServer(port: number): http.Server {
   ensurePreviewsDir()
+  const { host } = resolvePreviewBind(PREVIEW_HOST, PREVIEW_PASSWORD)
 
   const server = http.createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       sendStatus(res, 405, 'Method Not Allowed')
       return
     }
-    if (!basicAuthPasses(req)) {
+    if (PREVIEW_PASSWORD && !basicAuthPasses(req)) {
       sendAuthChallenge(res)
       return
     }
@@ -177,8 +178,11 @@ export function createPreviewServer(port: number): http.Server {
     }
   })
 
-  server.listen(port, () => {
-    logger.info({ port, dir: PREVIEWS_DIR }, 'preview-server listening')
+  server.listen(port, host, () => {
+    logger.info(
+      { port, host, dir: PREVIEWS_DIR, authRequired: Boolean(PREVIEW_PASSWORD) },
+      'preview-server listening',
+    )
   })
 
   return server

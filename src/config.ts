@@ -82,6 +82,23 @@ export const PREVIEW_HOST = (env['PREVIEW_HOST'] ?? '').trim()
 export const PREVIEW_USER = (env['PREVIEW_USER'] ?? '').trim()
 export const PREVIEW_PASSWORD = (env['PREVIEW_PASSWORD'] ?? '').trim()
 
+const LOCALHOST_BINDS = new Set(['127.0.0.1', '::1', 'localhost'])
+
+export function resolvePreviewBind(
+  host: string,
+  password: string,
+): { host: string } {
+  const requested = host.trim()
+  const effective = requested || '127.0.0.1'
+  if (!password && !LOCALHOST_BINDS.has(effective)) {
+    throw new Error(
+      `PREVIEW_HOST="${effective}" exposes the preview server beyond localhost without PREVIEW_PASSWORD. ` +
+        `Set PREVIEW_PASSWORD to enable public binding, or leave PREVIEW_HOST empty for 127.0.0.1.`,
+    )
+  }
+  return { host: effective }
+}
+
 export const WHATSAPP_ENABLED = (env['WHATSAPP_ENABLED'] ?? '').trim() === '1'
 export const WHATSAPP_PROVIDER = (env['WHATSAPP_PROVIDER'] ?? 'baileys').trim()
 

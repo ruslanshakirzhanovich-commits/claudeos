@@ -1,4 +1,3 @@
-import type Database from 'better-sqlite3'
 import { getDb } from './db.js'
 
 export interface SessionUsage {
@@ -29,8 +28,8 @@ interface Row {
   usage_updated_at: number | null
 }
 
-function read(db: InstanceType<typeof Database>, chatId: string): Row | undefined {
-  return db
+function read(chatId: string): Row | undefined {
+  return getDb()
     .prepare(
       `SELECT usage_input_tokens, usage_output_tokens, usage_cache_read, usage_cache_create,
               usage_context_window, usage_compactions, usage_updated_at
@@ -39,32 +38,32 @@ function read(db: InstanceType<typeof Database>, chatId: string): Row | undefine
     .get(chatId) as Row | undefined
 }
 
+// Does not touch usage_compactions: that counter is owned exclusively by
+// recordCompaction() so the two writers can't race and clobber each other.
 export function recordUsage(chatId: string, usage: ModelUsageLike): void {
-  const db = getDb()
-  const prior = read(db, chatId)
-  const compactions = prior?.usage_compactions ?? 0
-  db.prepare(
-    `INSERT INTO chat_preferences (
-       chat_id, usage_input_tokens, usage_output_tokens, usage_cache_read, usage_cache_create,
-       usage_context_window, usage_compactions, usage_updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(chat_id) DO UPDATE SET
-       usage_input_tokens = excluded.usage_input_tokens,
-       usage_output_tokens = excluded.usage_output_tokens,
-       usage_cache_read = excluded.usage_cache_read,
-       usage_cache_create = excluded.usage_cache_create,
-       usage_context_window = excluded.usage_context_window,
-       usage_updated_at = excluded.usage_updated_at`,
-  ).run(
-    chatId,
-    usage.inputTokens,
-    usage.outputTokens,
-    usage.cacheReadInputTokens,
-    usage.cacheCreationInputTokens,
-    usage.contextWindow,
-    compactions,
-    Date.now(),
-  )
+  getDb()
+    .prepare(
+      `INSERT INTO chat_preferences (
+         chat_id, usage_input_tokens, usage_output_tokens, usage_cache_read, usage_cache_create,
+         usage_context_window, usage_updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(chat_id) DO UPDATE SET
+         usage_input_tokens = excluded.usage_input_tokens,
+         usage_output_tokens = excluded.usage_output_tokens,
+         usage_cache_read = excluded.usage_cache_read,
+         usage_cache_create = excluded.usage_cache_create,
+         usage_context_window = excluded.usage_context_window,
+         usage_updated_at = excluded.usage_updated_at`,
+    )
+    .run(
+      chatId,
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.cacheReadInputTokens,
+      usage.cacheCreationInputTokens,
+      usage.contextWindow,
+      Date.now(),
+    )
 }
 
 export function recordCompaction(chatId: string): void {
@@ -95,7 +94,7 @@ export function resetUsage(chatId: string): void {
 }
 
 export function getUsage(chatId: string): SessionUsage | null {
-  const row = read(getDb(), chatId)
+  const row = read(chatId)
   if (!row || row.usage_updated_at === null) {
     if (row && row.usage_compactions && row.usage_compactions > 0) {
       return {

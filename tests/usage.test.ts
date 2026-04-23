@@ -75,6 +75,31 @@ describe('usage tracker (DB-backed)', () => {
     expect(u!.cacheReadTokens).toBe(0)
   })
 
+  it('recordUsage never overwrites compactions, even interleaved with recordCompaction', () => {
+    // Regression guard: the old implementation did read-modify-write on
+    // usage_compactions from within recordUsage. A compaction landing between
+    // that read and the UPDATE would be clobbered. This test pins the
+    // contract that recordUsage leaves usage_compactions alone entirely.
+    recordCompaction(CHAT)
+    recordUsage(CHAT, {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      contextWindow: 200_000,
+    })
+    recordCompaction(CHAT)
+    recordUsage(CHAT, {
+      inputTokens: 2,
+      outputTokens: 2,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      contextWindow: 200_000,
+    })
+    expect(getUsage(CHAT)!.compactions).toBe(2)
+    expect(getUsage(CHAT)!.inputTokens).toBe(2)
+  })
+
   it('resetUsage clears all state for the chat', () => {
     recordUsage(CHAT, {
       inputTokens: 1,

@@ -17,7 +17,7 @@ export type PermissionMode = 'bypassPermissions' | 'acceptEdits' | 'default' | '
 export interface RunAgentOptions {
   sessionId?: string
   onTyping?: () => void
-  permissionMode?: PermissionMode
+  permissionMode: PermissionMode
   log?: Logger
   model?: string
   effort?: string
@@ -53,8 +53,11 @@ function wrapWithClaudeMd(userMessage: string, activeModel: string | undefined):
 
 export async function runAgent(
   message: string,
-  opts: RunAgentOptions = {},
+  opts: RunAgentOptions,
 ): Promise<AgentResult> {
+  if (!opts || !opts.permissionMode) {
+    throw new Error('runAgent: permissionMode is required (no implicit bypassPermissions)')
+  }
   return trackInflight(runAgentInner(message, opts))
 }
 
@@ -62,7 +65,7 @@ async function runAgentInner(
   message: string,
   opts: RunAgentOptions,
 ): Promise<AgentResult> {
-  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model, effort, chatId } = opts
+  const { sessionId, onTyping, permissionMode, log = logger, model, effort, chatId } = opts
   const effectiveModel = model || CLAUDE_MODEL || undefined
   const wrapped = wrapWithClaudeMd(message, effectiveModel)
   const effectiveEffort = isEffortLevel(effort) ? effort : undefined
