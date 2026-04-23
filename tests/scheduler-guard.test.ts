@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { nonOverlapping } from '../src/scheduler.js'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('../src/logger.js', () => ({
+  logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+}))
+
+const { nonOverlapping } = await import('../src/scheduler.js')
 
 describe('nonOverlapping', () => {
   it('skips new calls while previous is still running', async () => {
