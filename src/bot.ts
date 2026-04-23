@@ -7,7 +7,8 @@ import {
   STORE_DIR,
   isAdmin,
 } from './config.js'
-import { formatForTelegram, splitMessage, parseChangelog } from './format.js'
+import { formatForTelegram, splitMessage } from './format.js'
+import { registerVersion } from './commands/version.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -368,29 +369,7 @@ export function createBot(): Bot {
     await ctx.reply(lines.join('\n'))
   })
 
-  bot.command('version', async (ctx) => {
-    try {
-      const content = fs.readFileSync(
-        path.join(process.cwd(), 'CHANGELOG.md'),
-        'utf8',
-      )
-      const entries = parseChangelog(content, 2)
-      if (entries.length === 0) {
-        await ctx.reply('CHANGELOG unavailable')
-        return
-      }
-      const blocks = entries
-        .map(
-          (e) =>
-            `v${e.version} - ${e.date}\n${e.bullets.map((b) => `- ${b}`).join('\n')}`,
-        )
-        .join('\n\n')
-      await ctx.reply(`ClaudeClaw v${entries[0].version}\n\n${blocks}`)
-    } catch (err) {
-      logger.error({ err }, 'failed to read CHANGELOG')
-      await ctx.reply('CHANGELOG unavailable')
-    }
-  })
+  registerVersion(bot)
 
   bot.on('message:text', async (ctx) => {
     const text = ctx.message?.text ?? ''
