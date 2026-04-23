@@ -88,6 +88,10 @@ export function isAuthorised(chatId: number | string): boolean {
   return isChatAllowed(String(chatId))
 }
 
+export function isOpenMode(): boolean {
+  return countAllowedChats() === 0
+}
+
 export function backupDatabase(destPath: string): void {
   getDb().exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`)
 }

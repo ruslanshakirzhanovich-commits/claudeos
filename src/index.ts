@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { PROJECT_ROOT, PID_FILE, STORE_DIR, TELEGRAM_BOT_TOKEN, DECAY_INTERVAL_MS, ALLOWED_CHAT_IDS, ADMIN_CHAT_IDS, PREVIEW_ENABLED, PREVIEW_PORT } from './config.js'
-import { initDatabase, seedAllowedChatsFromEnv } from './db.js'
+import { initDatabase, seedAllowedChatsFromEnv, isOpenMode } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
@@ -89,6 +89,14 @@ async function main(): Promise<void> {
   initDatabase()
   const seeded = seedAllowedChatsFromEnv(ALLOWED_CHAT_IDS)
   if (seeded > 0) logger.info({ seeded }, 'seeded allowed_chats from ALLOWED_CHAT_IDS env')
+
+  if (isOpenMode()) {
+    logger.warn(
+      '⚠️  OPEN MODE: allowed_chats is empty and ALLOWED_CHAT_IDS env is unset — ' +
+      'the bot will accept messages from ANY Telegram chat. Intended only for ' +
+      'first-run bootstrap. Set ALLOWED_CHAT_IDS in .env or use /adduser to close the door.',
+    )
+  }
 
   runDecaySweep()
   const decayTimer = setInterval(runDecaySweep, DECAY_INTERVAL_MS)

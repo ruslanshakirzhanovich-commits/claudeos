@@ -17,6 +17,7 @@ import {
   getTtsEnabled,
   setTtsEnabled,
   isAuthorised,
+  isOpenMode,
   listAllowedChats,
   addAllowedChat,
   removeAllowedChat,
@@ -160,6 +161,21 @@ export function parseChangelog(content: string, limit = 2): ChangelogEntry[] {
   return entries
 }
 
+const openModeWarnedChats = new Set<string>()
+function warnOpenModeOnce(
+  chatId: string,
+  userId: number | undefined,
+  username: string | undefined,
+  log: typeof logger,
+): void {
+  if (openModeWarnedChats.has(chatId)) return
+  openModeWarnedChats.add(chatId)
+  log.warn(
+    { chatId, userId, username },
+    'OPEN MODE accepted new chat — set ALLOWED_CHAT_IDS or run /adduser to lock down',
+  )
+}
+
 function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined; username: string | undefined } {
   return {
     chatId: String(ctx.chat?.id ?? ''),
@@ -181,6 +197,8 @@ async function handleMessage(
     log.warn('unauthorised chat')
     return
   }
+
+  if (isOpenMode()) warnOpenModeOnce(chatId, userId, username, log)
 
   touchAllowedChat(chatId)
   log.info({ preview: rawText.slice(0, 80) }, 'message received')
