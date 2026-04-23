@@ -3,11 +3,11 @@ import path from 'node:path'
 import { Bot, type Context, GrammyError, HttpError, InputFile } from 'grammy'
 import {
   TELEGRAM_BOT_TOKEN,
-  MAX_MESSAGE_LENGTH,
   TYPING_REFRESH_MS,
   STORE_DIR,
   isAdmin,
 } from './config.js'
+import { formatForTelegram, splitMessage, parseChangelog } from './format.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
@@ -43,73 +43,6 @@ import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { wrapUntrusted } from './untrusted.js'
 
-export function formatForTelegram(text: string): string {
-  if (!text) return ''
-
-  const codeBlocks: string[] = []
-  const inlineCodes: string[] = []
-
-  let work = text.replace(/```(\w+)?\n?([\s\S]*?)```/g, (_m, _lang, code) => {
-    const idx = codeBlocks.length
-    codeBlocks.push(code)
-    return `\u0001CB${idx}\u0001`
-  })
-
-  work = work.replace(/`([^`\n]+)`/g, (_m, code) => {
-    const idx = inlineCodes.length
-    inlineCodes.push(code)
-    return `\u0001IC${idx}\u0001`
-  })
-
-  work = work
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-
-  work = work
-    .replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>')
-    .replace(/\*\*([^\n*]+)\*\*/g, '<b>$1</b>')
-    .replace(/__([^\n_]+)__/g, '<b>$1</b>')
-    .replace(/(^|[\s(])\*([^\n*]+)\*/g, '$1<i>$2</i>')
-    .replace(/(^|[\s(])_([^\n_]+)_/g, '$1<i>$2</i>')
-    .replace(/~~([^\n~]+)~~/g, '<s>$1</s>')
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
-    .replace(/^\s*[-*+]\s+\[ \]\s+/gm, '☐ ')
-    .replace(/^\s*[-*+]\s+\[[xX]\]\s+/gm, '☑ ')
-    .replace(/^(\s*)[-*+]\s+/gm, '$1• ')
-    .replace(/^-{3,}$/gm, '')
-    .replace(/^\*{3,}$/gm, '')
-
-  work = work.replace(/\u0001IC(\d+)\u0001/g, (_m, idx) => {
-    const code = inlineCodes[Number(idx)] ?? ''
-    const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `<code>${escaped}</code>`
-  })
-  work = work.replace(/\u0001CB(\d+)\u0001/g, (_m, idx) => {
-    const code = codeBlocks[Number(idx)] ?? ''
-    const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `<pre>${escaped}</pre>`
-  })
-
-  work = work.replace(/\n{3,}/g, '\n\n')
-  return work.trim()
-}
-
-export function splitMessage(text: string, limit = MAX_MESSAGE_LENGTH): string[] {
-  if (text.length <= limit) return [text]
-  const chunks: string[] = []
-  let remaining = text
-  while (remaining.length > limit) {
-    let cut = remaining.lastIndexOf('\n', limit)
-    if (cut < limit * 0.5) cut = remaining.lastIndexOf(' ', limit)
-    if (cut < 0) cut = limit
-    chunks.push(remaining.slice(0, cut))
-    remaining = remaining.slice(cut).replace(/^\s+/, '')
-  }
-  if (remaining.length) chunks.push(remaining)
-  return chunks
-}
-
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
     await withRetry(() => ctx.reply('(no output)'), { label: 'tg-reply-empty' }).catch(() => {})
@@ -132,32 +65,6 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
       }
     }
   }
-}
-
-interface ChangelogEntry {
-  version: string
-  date: string
-  bullets: string[]
-}
-
-export function parseChangelog(content: string, limit = 2): ChangelogEntry[] {
-  const entries: ChangelogEntry[] = []
-  let current: ChangelogEntry | null = null
-
-  for (const line of content.split('\n')) {
-    const header = line.match(/^##\s+\[([^\]]+)\]\s*-\s*(.+?)\s*$/)
-    if (header) {
-      if (current) entries.push(current)
-      if (entries.length >= limit) return entries
-      current = { version: header[1], date: header[2], bullets: [] }
-      continue
-    }
-    if (current && line.startsWith('- ')) {
-      current.bullets.push(line.slice(2).replace(/`/g, '').trim())
-    }
-  }
-  if (current && entries.length < limit) entries.push(current)
-  return entries
 }
 
 const openModeWarnedChats = new Set<string>()

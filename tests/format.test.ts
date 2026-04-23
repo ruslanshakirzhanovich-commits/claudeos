@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatForTelegram, splitMessage, parseChangelog } from '../src/bot.js'
+import { formatForTelegram, splitMessage, parseChangelog } from '../src/format.js'
 
 describe('formatForTelegram', () => {
   it('escapes HTML-special chars in plain text', () => {
