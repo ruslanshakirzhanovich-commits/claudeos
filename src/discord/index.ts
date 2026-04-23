@@ -90,8 +90,17 @@ export async function initDiscord(): Promise<DiscordClient | null> {
 
   const client = createClient()
   client.onMessage(handleDiscordMessage)
-  await client.start()
+  // Register the wrapper BEFORE awaiting start() so that a SIGTERM
+  // arriving during login() still reaches stopDiscord → client.destroy().
+  // Without this, `active` stays null until login completes and the
+  // gateway connection leaks when the process is killed mid-handshake.
   active = client
+  try {
+    await client.start()
+  } catch (err) {
+    active = null
+    throw err
+  }
   logger.info('Discord client started')
   return client
 }
