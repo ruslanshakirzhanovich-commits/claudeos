@@ -62,17 +62,21 @@ export function registerStatus(bot: Bot): void {
       .join(' · ') || 'none'
 
     const usage = authorised ? getUsage(chatId) : null
-    const cacheTotal = usage ? usage.cacheReadTokens + usage.cacheCreateTokens : 0
-    const hitPct = cacheTotal > 0 ? Math.round((usage!.cacheReadTokens / cacheTotal) * 100) : null
+    // Hit rate: include raw input in the denominator. Non-cached fresh input
+    // is still a miss. Matches openclaw's formatCacheLine.
+    const cacheDenom = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
+    const hitPct = cacheDenom > 0 ? Math.round((usage!.cacheReadTokens / cacheDenom) * 100) : null
     const cacheLine = usage
-      ? `${hitPct === null ? '—' : `${hitPct}% hit`} · ${fmtCount(usage.cacheReadTokens)} cached, ${fmtCount(usage.cacheCreateTokens)} new`
+      ? `${hitPct === null ? '0% hit' : `${hitPct}% hit`} · ${fmtCount(usage.cacheReadTokens)} cached, ${fmtCount(usage.cacheCreateTokens)} new`
       : '(no turns yet)'
     const ctxUsed = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
     const ctxMax = usage?.contextWindow ?? 0
     const ctxPct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0
     const contextLine = ctxMax > 0
       ? `${fmtCount(ctxUsed)}/${fmtCount(ctxMax)} (${ctxPct}%) · 🧹 Compactions: ${usage!.compactions}`
-      : '(no turns yet)'
+      : usage
+        ? `🧹 Compactions: ${usage.compactions}`
+        : '(no turns yet)'
 
     const lines = [
       `🤖 <b>ClaudeClaw</b> v${BOT_VERSION} (${BOT_COMMIT})`,
