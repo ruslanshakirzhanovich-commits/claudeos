@@ -11,7 +11,8 @@
     "status": "tsx scripts/status.ts",
     "schedule": "node dist/schedule-cli.js",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "bash scripts/deploy.sh"
   },
   "engines": {
     "node": ">=20"
