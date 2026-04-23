@@ -570,9 +570,9 @@ export function createBot(): Bot {
   bot.catch((err) => {
     const e = err.error
     if (e instanceof GrammyError) {
-      logger.error({ err: e.description }, 'grammy error')
+      logger.error({ err: e, code: e.error_code }, 'grammy error')
     } else if (e instanceof HttpError) {
-      logger.error({ err: e.message }, 'telegram http error')
+      logger.error({ err: e }, 'telegram http error')
     } else {
       logger.error({ err: e }, 'unknown bot error')
     }
