@@ -15,11 +15,13 @@ import { registerBackup } from './commands/backup.js'
 import { registerHealth } from './commands/health.js'
 import { registerModels } from './commands/models.js'
 import { registerStatus } from './commands/status.js'
+import { registerEffort } from './commands/effort.js'
 import { runAgent } from './agent.js'
 import {
   getSession,
   setSession,
   getPreferredModel,
+  getEffortLevel,
   clearSession,
   countMemories,
   getTtsEnabled,
@@ -130,7 +132,8 @@ async function handleMessage(
     const sessionId = getSession(chatId) ?? undefined
     const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
     const model = getPreferredModel(chatId) ?? undefined
-    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model })
+    const effort = getEffortLevel(chatId) ?? undefined
+    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model, effort })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 
@@ -209,6 +212,7 @@ export function createBot(): Bot {
   registerHealth(bot)
   registerStatus(bot)
   registerModels(bot)
+  registerEffort(bot)
 
   registerBackup(bot)
 

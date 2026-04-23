@@ -4,6 +4,7 @@ import { PROJECT_ROOT, CLAUDE_MD_PATH, CLAUDE_MODEL } from './config.js'
 import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
 import { recordEvent } from './metrics.js'
+import { effortToThinkingTokens, isEffortLevel } from './effort.js'
 
 export interface AgentResult {
   text: string | null
@@ -18,6 +19,7 @@ export interface RunAgentOptions {
   permissionMode?: PermissionMode
   log?: Logger
   model?: string
+  effort?: string
 }
 
 function loadClaudeMd(): string {
@@ -58,9 +60,10 @@ async function runAgentInner(
   message: string,
   opts: RunAgentOptions,
 ): Promise<AgentResult> {
-  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model } = opts
+  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model, effort } = opts
   const effectiveModel = model || CLAUDE_MODEL || undefined
   const wrapped = wrapWithClaudeMd(message, effectiveModel)
+  const effectiveEffort = isEffortLevel(effort) ? effort : undefined
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
 
@@ -75,6 +78,7 @@ async function runAgentInner(
     }
     if (sessionId) options['resume'] = sessionId
     if (effectiveModel) options['model'] = effectiveModel
+    if (effectiveEffort) options['maxThinkingTokens'] = effortToThinkingTokens(effectiveEffort)
 
     const stream = query({ prompt: wrapped, options: options as any })
 

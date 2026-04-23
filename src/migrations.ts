@@ -102,6 +102,16 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: 'chat_preferences.effort_level',
+    up: (db) => {
+      const cols = db.prepare(`PRAGMA table_info(chat_preferences)`).all() as { name: string }[]
+      if (!cols.some((c) => c.name === 'effort_level')) {
+        db.exec(`ALTER TABLE chat_preferences ADD COLUMN effort_level TEXT`)
+      }
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {

@@ -199,6 +199,22 @@ export function setPreferredModel(chatId: string, modelId: string | null): void 
     .run(chatId, modelId)
 }
 
+export function getEffortLevel(chatId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT effort_level FROM chat_preferences WHERE chat_id = ?')
+    .get(chatId) as { effort_level: string | null } | undefined
+  return row?.effort_level ?? null
+}
+
+export function setEffortLevel(chatId: string, level: string | null): void {
+  getDb()
+    .prepare(
+      `INSERT INTO chat_preferences (chat_id, effort_level) VALUES (?, ?)
+       ON CONFLICT(chat_id) DO UPDATE SET effort_level = excluded.effort_level`,
+    )
+    .run(chatId, level)
+}
+
 export interface SessionRow {
   chat_id: string
   session_id: string
