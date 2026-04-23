@@ -13,6 +13,7 @@ import { registerPing, registerStats } from './commands/stats.js'
 import { registerUserCommands } from './commands/users.js'
 import { registerBackup } from './commands/backup.js'
 import { registerHealth } from './commands/health.js'
+import { registerUpdate } from './commands/update.js'
 import { registerModels } from './commands/models.js'
 import { registerStatus } from './commands/status.js'
 import { registerEffort } from './commands/effort.js'
@@ -221,6 +222,7 @@ export function createBot(): Bot {
   registerEffort(bot)
 
   registerBackup(bot)
+  registerUpdate(bot)
 
   registerVoice(bot)
 

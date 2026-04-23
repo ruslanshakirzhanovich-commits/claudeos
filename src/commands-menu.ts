@@ -28,6 +28,7 @@ const ADMIN_COMMANDS: BotCommand[] = [
   { command: 'adduser', description: 'Authorise a chat id (admin)' },
   { command: 'removeuser', description: 'Revoke a chat id (admin)' },
   { command: 'backup', description: 'Manual DB backup (admin)' },
+  { command: 'update', description: 'Pull latest from GitHub and restart (admin)' },
 ]
 
 export async function publishBotCommands(bot: Bot): Promise<void> {
