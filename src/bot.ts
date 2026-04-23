@@ -19,6 +19,7 @@ import { runAgent } from './agent.js'
 import {
   getSession,
   setSession,
+  getPreferredModel,
   clearSession,
   countMemories,
   getTtsEnabled,
@@ -128,7 +129,8 @@ async function handleMessage(
 
     const sessionId = getSession(chatId) ?? undefined
     const permissionMode = isAdmin(chatId) ? 'bypassPermissions' : 'plan'
-    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log })
+    const model = getPreferredModel(chatId) ?? undefined
+    const { text, newSessionId } = await runAgent(messageForAgent, { sessionId, permissionMode, log, model })
 
     if (newSessionId && newSessionId !== sessionId) setSession(chatId, newSessionId)
 

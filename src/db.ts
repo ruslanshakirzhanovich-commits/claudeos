@@ -183,6 +183,22 @@ export function setTtsEnabled(chatId: string, enabled: boolean): void {
     .run(chatId, enabled ? 1 : 0)
 }
 
+export function getPreferredModel(chatId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT preferred_model FROM chat_preferences WHERE chat_id = ?')
+    .get(chatId) as { preferred_model: string | null } | undefined
+  return row?.preferred_model ?? null
+}
+
+export function setPreferredModel(chatId: string, modelId: string | null): void {
+  getDb()
+    .prepare(
+      `INSERT INTO chat_preferences (chat_id, preferred_model) VALUES (?, ?)
+       ON CONFLICT(chat_id) DO UPDATE SET preferred_model = excluded.preferred_model`,
+    )
+    .run(chatId, modelId)
+}
+
 export interface SessionRow {
   chat_id: string
   session_id: string

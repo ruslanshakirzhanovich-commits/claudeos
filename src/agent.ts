@@ -17,6 +17,7 @@ export interface RunAgentOptions {
   onTyping?: () => void
   permissionMode?: PermissionMode
   log?: Logger
+  model?: string
 }
 
 function loadClaudeMd(): string {
@@ -49,7 +50,7 @@ async function runAgentInner(
   message: string,
   opts: RunAgentOptions,
 ): Promise<AgentResult> {
-  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger } = opts
+  const { sessionId, onTyping, permissionMode = 'bypassPermissions', log = logger, model } = opts
   const wrapped = wrapWithClaudeMd(message)
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
@@ -64,7 +65,8 @@ async function runAgentInner(
       permissionMode,
     }
     if (sessionId) options['resume'] = sessionId
-    if (CLAUDE_MODEL) options['model'] = CLAUDE_MODEL
+    const effectiveModel = model ?? CLAUDE_MODEL
+    if (effectiveModel) options['model'] = effectiveModel
 
     const stream = query({ prompt: wrapped, options: options as any })
 

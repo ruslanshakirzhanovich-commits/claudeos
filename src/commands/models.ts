@@ -1,5 +1,6 @@
 import type { Bot } from 'grammy'
-import { isAuthorised } from '../db.js'
+import { InlineKeyboard } from 'grammy'
+import { isAuthorised, getPreferredModel, setPreferredModel } from '../db.js'
 import { CLAUDE_MODEL } from '../config.js'
 
 interface ModelEntry {
@@ -9,7 +10,7 @@ interface ModelEntry {
   blurb: string
 }
 
-const MODELS: ModelEntry[] = [
+export const MODELS: ModelEntry[] = [
   {
     id: 'claude-opus-4-7',
     aliases: ['opus', 'opus-4.7'],
@@ -30,6 +31,9 @@ const MODELS: ModelEntry[] = [
   },
 ]
 
+const CALLBACK_PREFIX = 'model:'
+const DEFAULT_CHOICE = 'default'
+
 export function resolveActiveModel(envValue: string): { id: string; explicit: boolean } {
   if (!envValue) return { id: MODELS[0]!.id, explicit: false }
   const normalized = envValue.toLowerCase()
@@ -39,29 +43,74 @@ export function resolveActiveModel(envValue: string): { id: string; explicit: bo
   return { id: envValue, explicit: true }
 }
 
+function buildKeyboard(active: string | null): InlineKeyboard {
+  const kb = new InlineKeyboard()
+  for (const m of MODELS) {
+    const label = active === m.id ? `✓ ${m.name}` : m.name
+    kb.text(label, `${CALLBACK_PREFIX}${m.id}`).row()
+  }
+  const defaultLabel = active === null ? '✓ Use bot default' : 'Use bot default'
+  kb.text(defaultLabel, `${CALLBACK_PREFIX}${DEFAULT_CHOICE}`)
+  return kb
+}
+
+function describeActive(perChat: string | null): string {
+  if (perChat) return `<code>${perChat}</code> (this chat)`
+  const { id, explicit } = resolveActiveModel(CLAUDE_MODEL)
+  return `<code>${id}</code> ${explicit ? '(CLAUDE_MODEL env)' : '(SDK default)'}`
+}
+
 export function registerModels(bot: Bot): void {
   bot.command('models', async (ctx) => {
     const chatId = String(ctx.chat?.id ?? '')
     if (!isAuthorised(chatId)) return
-    const { id: activeId, explicit } = resolveActiveModel(CLAUDE_MODEL)
-    const lines = [
-      '<b>Available Claude models</b>',
+    const active = getPreferredModel(chatId)
+    const text = [
+      '<b>Select model for this chat</b>',
       '',
-    ]
-    for (const m of MODELS) {
-      const marker = m.id === activeId ? ' ← current' : ''
-      lines.push(`<b>${m.name}</b>${marker}`)
-      lines.push(`  id: <code>${m.id}</code>`)
-      lines.push(`  aliases: ${m.aliases.join(', ')}`)
-      lines.push(`  ${m.blurb}`)
-      lines.push('')
+      `Current: ${describeActive(active)}`,
+      '',
+      'Tap one to switch. "Use bot default" falls back to CLAUDE_MODEL env (or the SDK default).',
+    ].join('\n')
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: buildKeyboard(active) })
+  })
+
+  bot.on('callback_query:data', async (ctx, next) => {
+    const data = ctx.callbackQuery.data
+    if (!data.startsWith(CALLBACK_PREFIX)) {
+      await next()
+      return
     }
-    lines.push(
-      explicit
-        ? `Active via CLAUDE_MODEL=${CLAUDE_MODEL}`
-        : 'No CLAUDE_MODEL env set — using SDK default.',
-    )
-    lines.push('To override: set CLAUDE_MODEL in .env and restart the bot.')
-    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' })
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) {
+      await ctx.answerCallbackQuery({ text: 'Not authorised', show_alert: true })
+      return
+    }
+    const choice = data.slice(CALLBACK_PREFIX.length)
+    const valid =
+      choice === DEFAULT_CHOICE || MODELS.some((m) => m.id === choice)
+    if (!valid) {
+      await ctx.answerCallbackQuery({ text: 'Unknown model', show_alert: true })
+      return
+    }
+    if (choice === DEFAULT_CHOICE) {
+      setPreferredModel(chatId, null)
+      await ctx.answerCallbackQuery({ text: 'Cleared — using bot default' })
+    } else {
+      setPreferredModel(chatId, choice)
+      const entry = MODELS.find((m) => m.id === choice)
+      await ctx.answerCallbackQuery({ text: `Switched to ${entry?.name ?? choice}` })
+    }
+    const active = getPreferredModel(chatId)
+    const text = [
+      '<b>Model for this chat</b>',
+      '',
+      `Current: ${describeActive(active)}`,
+    ].join('\n')
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: buildKeyboard(active) })
+    } catch {
+      /* message can't be edited (e.g. too old) — answerCallbackQuery above is enough */
+    }
   })
 }

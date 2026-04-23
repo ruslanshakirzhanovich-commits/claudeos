@@ -92,6 +92,16 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    name: 'chat_preferences.preferred_model',
+    up: (db) => {
+      const cols = db.prepare(`PRAGMA table_info(chat_preferences)`).all() as { name: string }[]
+      if (!cols.some((c) => c.name === 'preferred_model')) {
+        db.exec(`ALTER TABLE chat_preferences ADD COLUMN preferred_model TEXT`)
+      }
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {
