@@ -152,13 +152,24 @@ export async function runDueTasks(send: Sender): Promise<void> {
   }
 }
 
+const HANG_LADDER = new Set([3, 10, 30, 100])
+
 export function nonOverlapping<A extends unknown[]>(
   fn: (...args: A) => Promise<void>,
   onSkip?: () => void,
 ): (...args: A) => void {
   let running = false
+  let consecutiveSkips = 0
   return (...args: A) => {
     if (running) {
+      consecutiveSkips++
+      if (HANG_LADDER.has(consecutiveSkips)) {
+        logger.warn(
+          { consecutive: consecutiveSkips },
+          'scheduler tick repeatedly skipped — previous run may be hung',
+        )
+        recordEvent('scheduler_hang', { consecutive: consecutiveSkips })
+      }
       onSkip?.()
       return
     }
@@ -167,6 +178,7 @@ export function nonOverlapping<A extends unknown[]>(
       .catch((err) => logger.error({ err }, 'nonOverlapping task crashed'))
       .finally(() => {
         running = false
+        consecutiveSkips = 0
       })
   }
 }
