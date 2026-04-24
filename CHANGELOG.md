@@ -2,6 +2,12 @@
 
 Все заметные изменения ClaudeClaw.
 
+## [1.5.1] - 2026-04-24
+- 🛠 `/update` перестал самоубиваться посреди деплоя: `deploy.sh` теперь спавнится через `sudo systemd-run --scope --collect --unit=claudeclaw-deploy-<ts>`, попадая в собственный transient scope. `systemctl restart claudeclaw` внутри скрипта больше не прибивает deploy-процесс вместе с ботом.
+- 📒 Deploy-лог переехал из `/tmp/claudeclaw-deploy.log` в `store/deploy.log`. systemd `PrivateTmp=true` больше не прячет лог — его видно с хоста и через новую команду.
+- 🩹 `/updatelog` — возвращает последние ~200 строк `store/deploy.log`, обрезая до ~3500 байт чтобы не упереться в 4096-символьный лимит Telegram.
+- ⚙️ Sudoers нужна новая строчка на prod: `claw ALL=(root) NOPASSWD: /usr/bin/systemd-run --scope *` (ставится одноразово перед первым апдейтом на 1.5.1).
+
 ## [1.5.0] - 2026-04-24
 - 🧠 Русский в классификаторе identity: `classifyMemory()` с Unicode-aware границами (JS `\b` не работает на кириллице). Identity-факты русскоязычных пользователей больше не тонут в episodic.
 - 💰 CLAUDE.md через SDK `systemPrompt` preset вместо ручной инъекции в user prompt — автоматический system-prompt cache заработал, двойной токен-счёт устранён.
