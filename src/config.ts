@@ -219,6 +219,15 @@ export const WHATSAPP_META_WEBHOOK_PATH = (
 ).trim()
 export const WHATSAPP_META_GRAPH_VERSION = (env['WHATSAPP_META_GRAPH_VERSION'] ?? 'v20.0').trim()
 
+// AES-256-GCM key for Baileys auth-file encryption at rest. Required when
+// WHATSAPP_ENABLED=1 and WHATSAPP_PROVIDER=baileys. Must decode (base64) to
+// exactly 32 bytes. Generate with:
+//   openssl rand -base64 32
+// Losing or rotating this key invalidates all saved Signal/Noise state —
+// the bot will fail to decrypt on boot, and recovery is to delete
+// store/whatsapp-auth/ and re-scan the pairing QR.
+export const WHATSAPP_AUTH_ENCRYPTION_KEY = (env['WHATSAPP_AUTH_ENCRYPTION_KEY'] ?? '').trim()
+
 const rawWhatsapp = env['ALLOWED_WHATSAPP_NUMBERS'] ?? ''
 export const ALLOWED_WHATSAPP_NUMBERS: readonly string[] = rawWhatsapp
   .split(',')
