@@ -138,6 +138,12 @@ export const MEMORY_SUMMARIZE_MIN_AGE_DAYS = readPositiveInt('MEMORY_SUMMARIZE_M
 export const MEMORY_SUMMARIZE_BATCH = readPositiveInt('MEMORY_SUMMARIZE_BATCH', 50)
 export const MEMORY_SUMMARIZE_MIN_BATCH = readPositiveInt('MEMORY_SUMMARIZE_MIN_BATCH', 10)
 
+// Hard ceiling on how long one summarizeViaAgentSdk call may run. If the
+// stream never produces a result event within this window, we abort —
+// protects the 24-hour consolidation sweep from stalling on a single hung
+// chat. Mirrors AGENT_STREAM_TIMEOUT_MS for the main agent path.
+export const SUMMARIZE_TIMEOUT_MS = readPositiveInt('SUMMARIZE_TIMEOUT_MS', 120_000)
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)
