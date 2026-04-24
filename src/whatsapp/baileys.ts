@@ -32,6 +32,14 @@ export function createBaileysClient(): WhatsAppClient {
   let msgHandler: WhatsAppMessageHandler | null = null
   let stopped = false
 
+  function cleanupQr(): void {
+    try {
+      if (fs.existsSync(QR_PATH)) fs.unlinkSync(QR_PATH)
+    } catch (err) {
+      logger.warn({ err }, 'baileys: failed to cleanup QR file')
+    }
+  }
+
   async function connect(): Promise<void> {
     if (stopped) return
     if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true })
@@ -69,11 +77,7 @@ export function createBaileysClient(): WhatsAppClient {
 
       if (connection === 'open') {
         logger.info('baileys: connected to WhatsApp')
-        try {
-          if (fs.existsSync(QR_PATH)) fs.unlinkSync(QR_PATH)
-        } catch {
-          /* ignore */
-        }
+        cleanupQr()
       }
 
       if (connection === 'close') {
@@ -82,6 +86,7 @@ export function createBaileysClient(): WhatsAppClient {
         logger.warn({ code, loggedOut }, 'baileys: connection closed')
         if (loggedOut) {
           logger.error('baileys: logged out on phone — delete store/whatsapp-auth and re-scan QR')
+          cleanupQr()
           return
         }
         if (!stopped) {
@@ -136,6 +141,7 @@ export function createBaileysClient(): WhatsAppClient {
     },
     async stop() {
       stopped = true
+      cleanupQr()
       try {
         sock?.end(undefined)
       } catch {
