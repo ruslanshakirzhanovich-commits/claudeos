@@ -41,12 +41,7 @@ interface MetaPayload {
 }
 
 function verifySignature(body: Buffer, signatureHeader: string | undefined): boolean {
-  if (!WHATSAPP_META_APP_SECRET) {
-    logger.warn(
-      'WHATSAPP_META_APP_SECRET not set — skipping signature verification (INSECURE in production)',
-    )
-    return true
-  }
+  if (!WHATSAPP_META_APP_SECRET) return false
   if (!signatureHeader) return false
   const expected =
     'sha256=' + crypto.createHmac('sha256', WHATSAPP_META_APP_SECRET).update(body).digest('hex')
@@ -183,6 +178,11 @@ export function createMetaClient(): WhatsAppClient {
 
   return {
     async start() {
+      if (!WHATSAPP_META_APP_SECRET) {
+        throw new Error(
+          'meta provider: WHATSAPP_META_APP_SECRET is required — webhook signature verification cannot be disabled',
+        )
+      }
       if (!WHATSAPP_META_VERIFY_TOKEN) {
         throw new Error('meta provider: WHATSAPP_META_VERIFY_TOKEN is required')
       }
