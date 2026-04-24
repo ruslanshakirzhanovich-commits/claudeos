@@ -4,6 +4,7 @@ import path from 'node:path'
 import { BufferJSON, initAuthCreds, proto } from '@whiskeysockets/baileys'
 import type { AuthenticationState, SignalDataTypeMap } from '@whiskeysockets/baileys'
 import { WHATSAPP_AUTH_ENCRYPTION_KEY } from '../config.js'
+import { logger } from '../logger.js'
 
 const IV_LEN = 12
 const TAG_LEN = 16
@@ -155,6 +156,64 @@ export async function useEncryptedMultiFileAuthState(
     },
     saveCreds: async () => writeEncrypted(folder, 'creds', creds, key),
   }
+}
+
+export interface MigrationResult {
+  migrated: number
+  alreadyEncrypted: number
+}
+
+export async function migratePlainAuthFiles(
+  folder: string,
+  key: Buffer,
+): Promise<MigrationResult> {
+  await fs.promises.mkdir(folder, { recursive: true })
+  const entries = await fs.promises.readdir(folder)
+  const set = new Set(entries)
+  let migrated = 0
+
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue
+    if (name.endsWith(ENCRYPTED_EXT)) continue // endsWith('.json') can't match '.json.enc' but keep as extra guard
+
+    const encSibling = `${name}.enc`
+    const plainPath = path.join(folder, name)
+    const encPath = path.join(folder, encSibling)
+
+    if (set.has(encSibling)) {
+      logger.warn(
+        { file: name },
+        'auth migration: plain and encrypted siblings both present — keeping encrypted, removing plain (partial prior migration)',
+      )
+      try {
+        await fs.promises.unlink(plainPath)
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      }
+      continue
+    }
+
+    const raw = await fs.promises.readFile(plainPath)
+    const ct = encrypt(raw, key)
+    const tmp = `${encPath}.tmp-${process.pid}-${Date.now()}`
+    await fs.promises.writeFile(tmp, ct)
+    await fs.promises.rename(tmp, encPath)
+    await fs.promises.unlink(plainPath)
+    migrated++
+  }
+
+  // Recount encrypted files after the pass so `alreadyEncrypted` reflects
+  // the post-migration state (includes files we just wrote).
+  let alreadyEncrypted = 0
+  const finalEntries = await fs.promises.readdir(folder)
+  for (const name of finalEntries) {
+    if (name.endsWith(ENCRYPTED_EXT)) alreadyEncrypted++
+  }
+  // But for a pure migration run where we produced N files, alreadyEncrypted
+  // should be "pre-existing encrypted" count; subtract the newly migrated.
+  alreadyEncrypted -= migrated
+
+  return { migrated, alreadyEncrypted }
 }
 
 export function loadEncryptionKey(): Buffer {
