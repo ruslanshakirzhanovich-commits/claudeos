@@ -3,13 +3,17 @@ import path from 'node:path'
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
-  useMultiFileAuthState,
 } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import qrcodeTerminal from 'qrcode-terminal'
 import qrcode from 'qrcode'
 import { STORE_DIR } from '../config.js'
 import { logger } from '../logger.js'
+import {
+  loadEncryptionKey,
+  migratePlainAuthFiles,
+  useEncryptedMultiFileAuthState,
+} from './auth-encryption.js'
 import type {
   WhatsAppClient,
   WhatsAppMessage,
@@ -32,7 +36,12 @@ export function createBaileysClient(): WhatsAppClient {
     if (stopped) return
     if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true })
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
+    const encKey = loadEncryptionKey()
+    const migrated = await migratePlainAuthFiles(AUTH_DIR, encKey)
+    if (migrated.migrated > 0) {
+      logger.info(migrated, 'baileys: encrypted legacy plain auth files')
+    }
+    const { state, saveCreds } = await useEncryptedMultiFileAuthState(AUTH_DIR, encKey)
     const { version } = await fetchLatestBaileysVersion()
     logger.info({ version }, 'baileys: starting WhatsApp socket')
 
