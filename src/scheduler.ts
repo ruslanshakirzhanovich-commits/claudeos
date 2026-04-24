@@ -112,13 +112,7 @@ export async function runDueTasks(send: Sender): Promise<void> {
       })
       const result = text ?? '(no output)'
       const nextRun = computeNextRun(task.schedule)
-      const changes = updateTaskAfterRun(
-        task.id,
-        nextRun,
-        result,
-        missed,
-        missed > 0 ? now : null,
-      )
+      const changes = updateTaskAfterRun(task.id, nextRun, result, missed, missed > 0 ? now : null)
       if (changes === 0) {
         logger.warn({ id: task.id }, 'task disappeared mid-run, update skipped')
         continue
