@@ -159,6 +159,23 @@ export const MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    version: 7,
+    name: 'scheduled_tasks.missed_runs and last_missed_at',
+    up: (db) => {
+      const cols = new Set(
+        (db.prepare(`PRAGMA table_info(scheduled_tasks)`).all() as { name: string }[]).map(
+          (c) => c.name,
+        ),
+      )
+      if (!cols.has('missed_runs')) {
+        db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN missed_runs INTEGER NOT NULL DEFAULT 0`)
+      }
+      if (!cols.has('last_missed_at')) {
+        db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN last_missed_at INTEGER`)
+      }
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {
