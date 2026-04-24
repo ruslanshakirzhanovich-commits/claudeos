@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { WHATSAPP_AUTH_ENCRYPTION_KEY } from '../config.js'
 
 const IV_LEN = 12
 const TAG_LEN = 16
@@ -32,4 +33,21 @@ export function decrypt(ciphertext: Buffer, key: Buffer): Buffer {
   } catch {
     throw new Error('auth file decryption failed')
   }
+}
+
+export function loadEncryptionKey(): Buffer {
+  if (!WHATSAPP_AUTH_ENCRYPTION_KEY) {
+    throw new Error(
+      'WHATSAPP_AUTH_ENCRYPTION_KEY is required to start the Baileys provider. ' +
+        'Generate one with: openssl rand -base64 32',
+    )
+  }
+  const buf = Buffer.from(WHATSAPP_AUTH_ENCRYPTION_KEY, 'base64')
+  if (buf.length !== 32) {
+    throw new Error(
+      `WHATSAPP_AUTH_ENCRYPTION_KEY must decode to 32 bytes (got ${buf.length}). ` +
+        'Generate one with: openssl rand -base64 32',
+    )
+  }
+  return buf
 }
