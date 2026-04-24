@@ -63,9 +63,9 @@ export function listAllowedChats(): AllowedChatRow[] {
 }
 
 export function isChatAllowed(chatId: string): boolean {
-  const row = getDb()
-    .prepare('SELECT 1 AS ok FROM allowed_chats WHERE chat_id = ?')
-    .get(chatId) as { ok: number } | undefined
+  const row = getDb().prepare('SELECT 1 AS ok FROM allowed_chats WHERE chat_id = ?').get(chatId) as
+    | { ok: number }
+    | undefined
   return Boolean(row)
 }
 
@@ -84,7 +84,11 @@ export function isValidTelegramChatId(chatId: string): boolean {
   return TELEGRAM_CHAT_ID_RE.test(chatId)
 }
 
-export function addAllowedChat(chatId: string, addedBy: string | null, note: string | null): boolean {
+export function addAllowedChat(
+  chatId: string,
+  addedBy: string | null,
+  note: string | null,
+): boolean {
   if (!isValidTelegramChatId(chatId)) {
     throw new Error(`addAllowedChat: not a Telegram chat id: ${chatId.slice(0, 80)}`)
   }
@@ -144,7 +148,31 @@ export function isOpenMode(): boolean {
   return countAllowedChats() === 0
 }
 
-export function backupDatabase(destPath: string): void {
+// SQLite's VACUUM INTO does not support parameter binding for the target
+// path — it must be interpolated into the statement. That's safe as long as
+// we tightly validate what's in `destPath` first. The allowed-directory
+// prefix check blocks traversal, and the filename regex blocks quotes, shell
+// metacharacters, and anything that could break out of the SQL literal.
+const SAFE_BACKUP_FILENAME = /^[A-Za-z0-9._-]+\.db$/
+
+export function assertSafeBackupPath(destPath: string, allowedDir: string): void {
+  if (!path.isAbsolute(destPath)) {
+    throw new Error(`backup destPath must be absolute: ${destPath}`)
+  }
+  const resolvedDest = path.resolve(destPath)
+  const resolvedDir = path.resolve(allowedDir)
+  const withSep = resolvedDir.endsWith(path.sep) ? resolvedDir : resolvedDir + path.sep
+  if (!resolvedDest.startsWith(withSep)) {
+    throw new Error(`backup destPath outside allowed dir: ${destPath}`)
+  }
+  const name = path.basename(resolvedDest)
+  if (!SAFE_BACKUP_FILENAME.test(name)) {
+    throw new Error(`invalid backup filename: ${name}`)
+  }
+}
+
+export function backupDatabase(destPath: string, allowedDir: string): void {
+  assertSafeBackupPath(destPath, allowedDir)
   getDb().exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`)
 }
 
@@ -156,7 +184,10 @@ export interface BackupVerification {
 }
 
 export function verifyBackup(backupPath: string): BackupVerification {
-  const handle = new BetterSqlite3(backupPath, { readonly: true, fileMustExist: true }) as InstanceType<typeof Database>
+  const handle = new BetterSqlite3(backupPath, {
+    readonly: true,
+    fileMustExist: true,
+  }) as InstanceType<typeof Database>
   try {
     const integrityRows = handle.pragma('integrity_check') as Array<{ integrity_check: string }>
     const integrity = integrityRows.map((r) => r.integrity_check).join('; ')
@@ -172,7 +203,9 @@ export function verifyBackup(backupPath: string): BackupVerification {
     const schemaVersion = handle.pragma('user_version', { simple: true }) as number
     const sessions = (handle.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c
     const memories = (handle.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
-    const allowedChats = (handle.prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }).c
+    const allowedChats = (
+      handle.prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }
+    ).c
     return { schemaVersion, sessions, memories, allowedChats }
   } finally {
     handle.close()
@@ -202,13 +235,13 @@ export function getBotStats(): BotStats {
          (SELECT COUNT(*) FROM scheduled_tasks WHERE status = 'paused')      AS tasks_paused`,
     )
     .get(cutoff24h) as {
-      allowed: number
-      mem_total: number
-      mem_recent: number
-      unique_chats: number
-      tasks_active: number
-      tasks_paused: number
-    }
+    allowed: number
+    mem_total: number
+    mem_recent: number
+    unique_chats: number
+    tasks_active: number
+    tasks_paused: number
+  }
   return {
     allowedChats: row.allowed,
     totalMemories: row.mem_total,
@@ -274,9 +307,9 @@ export interface SessionRow {
 }
 
 export function getSession(chatId: string): string | null {
-  const row = getDb()
-    .prepare('SELECT session_id FROM sessions WHERE chat_id = ?')
-    .get(chatId) as { session_id: string } | undefined
+  const row = getDb().prepare('SELECT session_id FROM sessions WHERE chat_id = ?').get(chatId) as
+    | { session_id: string }
+    | undefined
   return row?.session_id ?? null
 }
 
@@ -405,8 +438,14 @@ export function touchMemories(ids: number[]): void {
 export function decayMemories(): { decayed: number; deleted: number } {
   const db = getDb()
   const cutoff = Date.now() - 24 * 60 * 60 * 1000
-  const updateStmt = db.prepare('UPDATE memories SET salience = salience * 0.98 WHERE created_at < ?')
-  const deleteStmt = db.prepare('DELETE FROM memories WHERE salience < 0.1')
+  // Decay is episodic-only. Semantic memories model long-lived identity
+  // facts ("user prefers X", "user lives in Y") and must not evaporate
+  // just because nobody queried them for a while.
+  const updateStmt = db.prepare(
+    `UPDATE memories SET salience = salience * 0.98
+       WHERE sector = 'episodic' AND created_at < ?`,
+  )
+  const deleteStmt = db.prepare(`DELETE FROM memories WHERE sector = 'episodic' AND salience < 0.1`)
   const tx = db.transaction(() => {
     const decayInfo = updateStmt.run(cutoff)
     const delInfo = deleteStmt.run()
@@ -428,10 +467,7 @@ export interface StaleEpisodic {
 
 // Which chats have >= minCount episodic rows older than cutoffMs. Used by
 // the summarize sweep to pick candidates without walking every chat.
-export function listChatsWithStaleEpisodic(
-  cutoffMs: number,
-  minCount: number,
-): string[] {
+export function listChatsWithStaleEpisodic(cutoffMs: number, minCount: number): string[] {
   const rows = getDb()
     .prepare(
       `SELECT chat_id, COUNT(*) AS c FROM memories
@@ -490,38 +526,184 @@ export function replaceEpisodicWithSummary(
   return tx()
 }
 
+export interface CapEpisodicOptions {
+  // Spare rows whose salience is at or above this threshold. These are
+  // usually curated identity facts that the user touches repeatedly.
+  protectMinSalience?: number
+  // Spare rows created at or after this epoch-ms cutoff. Stops newly-minted
+  // memories from being evicted by an active chat that just happens to have
+  // touched other rows more recently.
+  protectCreatedAfterMs?: number
+}
+
 // Keep at most `cap` episodic memories per chat. Drops the oldest by
 // accessed_at so the active conversation's context survives even after
 // a long idle period. Semantic memories are never touched — they carry
 // long-lived user profile facts that aren't supposed to age out.
 // Returns how many rows were deleted across all chats. cap <= 0 is a
 // no-op so the feature can be disabled via env.
-export function capEpisodicMemories(cap: number): { deleted: number } {
+export function capEpisodicMemories(
+  cap: number,
+  opts: CapEpisodicOptions = {},
+): { deleted: number } {
   if (cap <= 0) return { deleted: 0 }
   const db = getDb()
-  const stmt = db.prepare(
-    `DELETE FROM memories
-       WHERE id IN (
-         SELECT id FROM (
-           SELECT id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY chat_id ORDER BY accessed_at DESC
-                  ) AS rn
-             FROM memories
-            WHERE sector = 'episodic'
-         )
-         WHERE rn > ?
-       )`,
-  )
-  const info = stmt.run(cap)
+
+  const selectOverflow = `
+    SELECT id FROM (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY chat_id ORDER BY accessed_at DESC
+             ) AS rn
+        FROM memories
+       WHERE sector = 'episodic'
+    )
+    WHERE rn > ?
+  `
+  let sql = `DELETE FROM memories WHERE id IN (${selectOverflow})`
+  const params: Array<number> = [cap]
+  if (opts.protectMinSalience !== undefined) {
+    sql += ` AND salience < ?`
+    params.push(opts.protectMinSalience)
+  }
+  if (opts.protectCreatedAfterMs !== undefined) {
+    sql += ` AND created_at < ?`
+    params.push(opts.protectCreatedAfterMs)
+  }
+  const info = db.prepare(sql).run(...params)
   return { deleted: Number(info.changes) }
+}
+
+export interface CapEpisodicBatchedOptions extends CapEpisodicOptions {
+  // How many rows to delete per transaction before yielding to the event
+  // loop. Keeps a 100k-row cleanup from freezing the bot for a whole second
+  // under better-sqlite3's synchronous API. `undefined` or 0 means one-shot.
+  batchSize?: number
+}
+
+// Async sibling of capEpisodicMemories that splits the DELETE into fixed-size
+// passes and awaits setImmediate between each, so incoming Telegram/Discord
+// messages can be handled mid-sweep instead of queueing behind a multi-second
+// synchronous delete.
+export async function capEpisodicMemoriesBatched(
+  cap: number,
+  opts: CapEpisodicBatchedOptions = {},
+): Promise<{ deleted: number; batches: number }> {
+  if (cap <= 0) return { deleted: 0, batches: 0 }
+  const db = getDb()
+  const batchSize = opts.batchSize && opts.batchSize > 0 ? opts.batchSize : 0
+
+  // The protection filters must live inside the IN-subquery so LIMIT selects
+  // exactly the rows that will actually be deleted; otherwise LIMIT can pick
+  // a protected row and the outer WHERE filters it out, leaving the cap
+  // under-enforced per pass.
+  let selectOverflow = `
+    SELECT id FROM (
+      SELECT id, salience, created_at,
+             ROW_NUMBER() OVER (
+               PARTITION BY chat_id ORDER BY accessed_at DESC
+             ) AS rn
+        FROM memories
+       WHERE sector = 'episodic'
+    )
+    WHERE rn > ?
+  `
+  const baseParams: Array<number> = [cap]
+  if (opts.protectMinSalience !== undefined) {
+    selectOverflow += ` AND salience < ?`
+    baseParams.push(opts.protectMinSalience)
+  }
+  if (opts.protectCreatedAfterMs !== undefined) {
+    selectOverflow += ` AND created_at < ?`
+    baseParams.push(opts.protectCreatedAfterMs)
+  }
+  if (batchSize > 0) {
+    selectOverflow += ` LIMIT ?`
+  }
+  const sql = `DELETE FROM memories WHERE id IN (${selectOverflow})`
+
+  const stmt = db.prepare(sql)
+
+  let totalDeleted = 0
+  let batches = 0
+  for (;;) {
+    const params = batchSize > 0 ? [...baseParams, batchSize] : baseParams
+    const info = stmt.run(...params)
+    const n = Number(info.changes)
+    batches += 1
+    totalDeleted += n
+    if (batchSize === 0 || n < batchSize) break
+    // Yield so the event loop can process queued I/O before the next pass.
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  return { deleted: totalDeleted, batches }
+}
+
+export interface IdentityFactRow {
+  id: number
+  chat_id: string
+  fact: string
+  fact_normalized: string
+  source: string
+  created_at: number
+}
+
+const IDENTITY_FACT_MAX_LEN = 1000
+
+function normalizeFact(fact: string): string {
+  return fact.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Returns true if a new row was inserted, false if a matching fact (by
+// normalized form) already existed for this chat. Throws on invalid input
+// so the caller can surface a clear error to the user.
+export function addIdentityFact(chatId: string, fact: string, source: string = 'user'): boolean {
+  const trimmed = fact.trim()
+  if (!trimmed) throw new Error('identity fact must not be empty')
+  if (trimmed.length > IDENTITY_FACT_MAX_LEN) {
+    throw new Error(`identity fact too long (max ${IDENTITY_FACT_MAX_LEN} chars)`)
+  }
+  const normalized = normalizeFact(trimmed)
+  const info = getDb()
+    .prepare(
+      `INSERT INTO identity_facts (chat_id, fact, fact_normalized, source, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(chat_id, fact_normalized) DO NOTHING`,
+    )
+    .run(chatId, trimmed, normalized, source, Date.now())
+  return info.changes > 0
+}
+
+export function listIdentityFacts(chatId: string): IdentityFactRow[] {
+  return getDb()
+    .prepare(
+      `SELECT id, chat_id, fact, fact_normalized, source, created_at
+         FROM identity_facts
+        WHERE chat_id = ?
+        ORDER BY created_at ASC`,
+    )
+    .all(chatId) as IdentityFactRow[]
+}
+
+export function removeIdentityFact(chatId: string, id: number): boolean {
+  const info = getDb()
+    .prepare(`DELETE FROM identity_facts WHERE chat_id = ? AND id = ?`)
+    .run(chatId, id)
+  return info.changes > 0
+}
+
+export function countIdentityFacts(chatId: string): number {
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) AS c FROM identity_facts WHERE chat_id = ?`)
+    .get(chatId) as { c: number }
+  return row.c
 }
 
 export function countMemories(chatId?: string): number {
   const row = chatId
-    ? (getDb()
-        .prepare('SELECT COUNT(*) AS c FROM memories WHERE chat_id = ?')
-        .get(chatId) as { c: number })
+    ? (getDb().prepare('SELECT COUNT(*) AS c FROM memories WHERE chat_id = ?').get(chatId) as {
+        c: number
+      })
     : (getDb().prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number })
   return row.c
 }
@@ -538,7 +720,9 @@ export interface ScheduledTask {
   created_at: number
 }
 
-export function createTask(task: Omit<ScheduledTask, 'last_run' | 'last_result' | 'created_at'>): void {
+export function createTask(
+  task: Omit<ScheduledTask, 'last_run' | 'last_result' | 'created_at'>,
+): void {
   getDb()
     .prepare(
       `INSERT INTO scheduled_tasks
@@ -556,9 +740,9 @@ export function listTasks(): ScheduledTask[] {
 
 export function getTask(id: string): ScheduledTask | null {
   return (
-    (getDb()
-      .prepare('SELECT * FROM scheduled_tasks WHERE id = ?')
-      .get(id) as ScheduledTask | undefined) ?? null
+    (getDb().prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id) as
+      | ScheduledTask
+      | undefined) ?? null
   )
 }
 

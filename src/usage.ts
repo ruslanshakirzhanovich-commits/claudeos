@@ -38,8 +38,12 @@ function read(chatId: string): Row | undefined {
     .get(chatId) as Row | undefined
 }
 
-// Does not touch usage_compactions: that counter is owned exclusively by
-// recordCompaction() so the two writers can't race and clobber each other.
+// Cumulative counters per chat: each call adds to the running totals rather
+// than overwriting them, so usage is correct even under concurrent writes
+// and so per-turn numbers from the SDK are actually summed instead of
+// clobbering one another. contextWindow tracks the peak (not a sum — a
+// window doesn't add up across turns). Does not touch usage_compactions:
+// that counter is owned exclusively by recordCompaction().
 export function recordUsage(chatId: string, usage: ModelUsageLike): void {
   getDb()
     .prepare(
@@ -48,12 +52,12 @@ export function recordUsage(chatId: string, usage: ModelUsageLike): void {
          usage_context_window, usage_updated_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(chat_id) DO UPDATE SET
-         usage_input_tokens = excluded.usage_input_tokens,
-         usage_output_tokens = excluded.usage_output_tokens,
-         usage_cache_read = excluded.usage_cache_read,
-         usage_cache_create = excluded.usage_cache_create,
-         usage_context_window = excluded.usage_context_window,
-         usage_updated_at = excluded.usage_updated_at`,
+         usage_input_tokens  = COALESCE(usage_input_tokens,  0) + excluded.usage_input_tokens,
+         usage_output_tokens = COALESCE(usage_output_tokens, 0) + excluded.usage_output_tokens,
+         usage_cache_read    = COALESCE(usage_cache_read,    0) + excluded.usage_cache_read,
+         usage_cache_create  = COALESCE(usage_cache_create,  0) + excluded.usage_cache_create,
+         usage_context_window = MAX(COALESCE(usage_context_window, 0), excluded.usage_context_window),
+         usage_updated_at    = excluded.usage_updated_at`,
     )
     .run(
       chatId,

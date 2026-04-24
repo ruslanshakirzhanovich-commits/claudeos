@@ -137,6 +137,28 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 6,
+    name: 'identity_facts (curated, user-owned)',
+    up: (db) => {
+      // Curated per-chat facts set explicitly via /remember. Kept out of the
+      // `memories` table so they bypass decay/cap and stay bounded in size.
+      // fact_normalized is a trimmed+lowercased form used for dedupe only.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS identity_facts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          chat_id TEXT NOT NULL,
+          fact TEXT NOT NULL,
+          fact_normalized TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'user',
+          created_at INTEGER NOT NULL,
+          UNIQUE(chat_id, fact_normalized)
+        );
+        CREATE INDEX IF NOT EXISTS idx_identity_facts_chat
+          ON identity_facts(chat_id, created_at DESC);
+      `)
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {

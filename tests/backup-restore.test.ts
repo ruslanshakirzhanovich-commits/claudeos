@@ -61,7 +61,7 @@ describe('backup → restore → verify roundtrip', () => {
       { chatId: '456', content: 'other chat turn', sector: 'episodic' },
     ])
 
-    backupDatabase(backupFile)
+    backupDatabase(backupFile, tmpDir)
     const report = verifyBackup(backupFile)
 
     expect(report.memories).toBe(3)
@@ -76,7 +76,7 @@ describe('backup → restore → verify roundtrip', () => {
       { chatId: '123', content: 'note one', sector: 'episodic' },
       { chatId: '123', content: 'note two', sector: 'semantic' },
     ])
-    backupDatabase(backupFile)
+    backupDatabase(backupFile, tmpDir)
 
     // Open the backup as if it were a new deployment's DB.
     const restored = new BetterSqlite3(backupFile, { readonly: true, fileMustExist: true })
@@ -109,7 +109,7 @@ describe('backup → restore → verify roundtrip', () => {
   })
 
   it('verifyBackup refuses a corrupted backup file', () => {
-    backupDatabase(backupFile)
+    backupDatabase(backupFile, tmpDir)
     // Flip a byte near the file header to corrupt it.
     const buf = fs.readFileSync(backupFile)
     buf[100] = buf[100]! ^ 0xff

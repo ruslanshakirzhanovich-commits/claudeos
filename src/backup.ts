@@ -6,7 +6,7 @@ import { logger } from './logger.js'
 import { recordEvent } from './metrics.js'
 
 const BACKUPS_SUBDIR = 'backups'
-const BACKUP_FILENAME_RE = /^claudeclaw-[\dT:\-]+\.db$/
+const BACKUP_FILENAME_RE = /^claudeclaw-[\dT:-]+\.db$/
 
 export interface BackupResult {
   path: string
@@ -23,7 +23,7 @@ export function createAndVerifyBackup(): BackupResult {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const destPath = path.join(dir, `claudeclaw-${stamp}.db`)
-  backupDatabase(destPath)
+  backupDatabase(destPath, dir)
   const verification = verifyBackup(destPath)
   const sizeBytes = fs.statSync(destPath).size
   return { path: destPath, sizeBytes, verification }
@@ -35,7 +35,11 @@ export function rotateBackups(keep: number): number {
   const files = fs
     .readdirSync(dir)
     .filter((f) => BACKUP_FILENAME_RE.test(f))
-    .map((f) => ({ name: f, full: path.join(dir, f), mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+    .map((f) => ({
+      name: f,
+      full: path.join(dir, f),
+      mtime: fs.statSync(path.join(dir, f)).mtimeMs,
+    }))
     .sort((a, b) => b.mtime - a.mtime)
   const toRemove = files.slice(Math.max(0, keep))
   let removed = 0
