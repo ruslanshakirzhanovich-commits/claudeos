@@ -11,6 +11,7 @@ vi.mock('../src/config.js', () => ({
   EFFORT_TOKENS_XHIGH: 65536,
   RATE_LIMIT_CAPACITY: 10,
   RATE_LIMIT_REFILL_PER_MIN: 10,
+  RATE_LIMIT_MAX_TRACKED: 10_000,
   MEMORY_EPISODIC_CAP_PER_CHAT: 1000,
 }))
 
@@ -62,10 +63,7 @@ describe('handleWhatsAppMessage', () => {
       sends.push([jid, text])
     }
 
-    await handleWhatsAppMessage(
-      { jid: JID, text: 'hi', isGroup: false },
-      send,
-    )
+    await handleWhatsAppMessage({ jid: JID, text: 'hi', isGroup: false }, send)
 
     expect(sends.length).toBeGreaterThan(1)
     for (const [, body] of sends) expect(body.length).toBeLessThanOrEqual(4096)
@@ -79,40 +77,28 @@ describe('handleWhatsAppMessage', () => {
       sends.push([jid, text])
     }
 
-    await handleWhatsAppMessage(
-      { jid: JID, text: 'hi', isGroup: false },
-      send,
-    )
+    await handleWhatsAppMessage({ jid: JID, text: 'hi', isGroup: false }, send)
 
     expect(sends).toEqual([[JID, 'ok']])
   })
 
   it('skips group messages — v1 is private only', async () => {
     const send = vi.fn()
-    await handleWhatsAppMessage(
-      { jid: '120363000@g.us', text: 'hi', isGroup: true },
-      send,
-    )
+    await handleWhatsAppMessage({ jid: '120363000@g.us', text: 'hi', isGroup: true }, send)
     expect(runAgentSpy).not.toHaveBeenCalled()
     expect(send).not.toHaveBeenCalled()
   })
 
   it('defaults to plan mode for non-admin numbers', async () => {
     runAgentSpy.mockResolvedValue({ text: 'ok' })
-    await handleWhatsAppMessage(
-      { jid: JID, text: 'hi', isGroup: false },
-      async () => {},
-    )
+    await handleWhatsAppMessage({ jid: JID, text: 'hi', isGroup: false }, async () => {})
     expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'plan' })
   })
 
   it('upgrades to bypassPermissions when the number is on the admin list', async () => {
     setAdminList(['15551234567'])
     runAgentSpy.mockResolvedValue({ text: 'ok' })
-    await handleWhatsAppMessage(
-      { jid: JID, text: 'hi', isGroup: false },
-      async () => {},
-    )
+    await handleWhatsAppMessage({ jid: JID, text: 'hi', isGroup: false }, async () => {})
     expect(runAgentSpy.mock.calls[0]![1]).toMatchObject({ permissionMode: 'bypassPermissions' })
   })
 })

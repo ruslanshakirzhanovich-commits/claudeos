@@ -1,10 +1,6 @@
 import path from 'node:path'
 import { Bot, type Context, GrammyError, HttpError, InputFile } from 'grammy'
-import {
-  TELEGRAM_BOT_TOKEN,
-  TYPING_REFRESH_MS,
-  isAdmin,
-} from './config.js'
+import { TELEGRAM_BOT_TOKEN, TYPING_REFRESH_MS, isAdmin } from './config.js'
 import { formatForTelegram, splitMessage } from './format.js'
 import { nonOverlapping } from './scheduler.js'
 import { registerVersion } from './commands/version.js'
@@ -28,12 +24,11 @@ import {
   getBotStats,
   touchAllowedChat,
   getSchemaVersion,
+  addIdentityFact,
+  listIdentityFacts,
+  removeIdentityFact,
 } from './db.js'
-import {
-  transcribeAudio,
-  voiceCapabilities,
-  synthesizeSpeech,
-} from './voice.js'
+import { transcribeAudio, voiceCapabilities, synthesizeSpeech } from './voice.js'
 import {
   downloadMedia,
   buildPhotoMessage,
@@ -86,7 +81,11 @@ function warnOpenModeOnce(
   )
 }
 
-function ctxIdentity(ctx: Context): { chatId: string; userId: number | undefined; username: string | undefined } {
+function ctxIdentity(ctx: Context): {
+  chatId: string
+  userId: number | undefined
+  username: string | undefined
+} {
   return {
     chatId: String(ctx.chat?.id ?? ''),
     userId: ctx.from?.id,
@@ -142,8 +141,7 @@ async function handleMessage(
 
     const text = result.text
     const replyText = text ?? '(no output)'
-    const wantVoice =
-      (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
+    const wantVoice = (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
 
     if (wantVoice && text) {
       try {
@@ -175,9 +173,10 @@ export function createBot(): Bot {
   bot.command('start', async (ctx) => {
     const chatId = String(ctx.chat?.id ?? '')
     const n = countAllowedChats()
-    const authLine = n > 0
-      ? `Auth configured (${n} chat${n === 1 ? '' : 's'} allowed).`
-      : 'No authorised chats — message this chat ID to the admin to get whitelisted.'
+    const authLine =
+      n > 0
+        ? `Auth configured (${n} chat${n === 1 ? '' : 's'} allowed).`
+        : 'No authorised chats — message this chat ID to the admin to get whitelisted.'
     await ctx.reply(`ClaudeClaw online. Chat ID: ${chatId}\n\n${authLine}`)
   })
 
@@ -192,8 +191,8 @@ export function createBot(): Bot {
     resetUsage(chatId)
     await ctx.reply(
       'Session cleared. Starting fresh.\n\n' +
-      'Note: long-term memory (facts the bot stored about you) is preserved. ' +
-      'To wipe everything including memories, ask an admin to /removeuser then /adduser you again.',
+        'Note: long-term memory (facts the bot stored about you) is preserved. ' +
+        'To wipe everything including memories, ask an admin to /removeuser then /adduser you again.',
     )
   })
 
@@ -202,6 +201,50 @@ export function createBot(): Bot {
     if (!isAuthorised(chatId)) return
     const total = countMemories(chatId)
     await ctx.reply(`Stored memories for this chat: ${total}`)
+  })
+
+  // Curated identity facts — survive decay/cap and are authoritative over
+  // anything auto-captured in the recall pool.
+  bot.command('remember', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) return
+    const text = (ctx.match ?? '').toString().trim()
+    if (!text) {
+      await ctx.reply('Usage: /remember <fact>\n\nExample: /remember I prefer terse answers.')
+      return
+    }
+    try {
+      const added = addIdentityFact(chatId, text, 'user')
+      await ctx.reply(added ? 'Got it. Added to your identity facts.' : 'Already remembered.')
+    } catch (err) {
+      const msg = (err as Error).message ?? 'unknown'
+      await ctx.reply(`Could not remember: ${msg.slice(0, 200)}`)
+    }
+  })
+
+  bot.command('facts', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) return
+    const facts = listIdentityFacts(chatId)
+    if (facts.length === 0) {
+      await ctx.reply('No identity facts yet. Use /remember <fact> to add one.')
+      return
+    }
+    const lines = facts.map((f) => `#${f.id} — ${f.fact}`)
+    await ctx.reply(`Identity facts (${facts.length}):\n\n${lines.join('\n')}`)
+  })
+
+  bot.command('forgetfact', async (ctx) => {
+    const chatId = String(ctx.chat?.id ?? '')
+    if (!isAuthorised(chatId)) return
+    const raw = (ctx.match ?? '').toString().trim()
+    const id = Number(raw)
+    if (!raw || !Number.isFinite(id) || id <= 0) {
+      await ctx.reply('Usage: /forgetfact <id>\n\nUse /facts to see ids.')
+      return
+    }
+    const ok = removeIdentityFact(chatId, id)
+    await ctx.reply(ok ? 'Forgotten.' : `No fact #${id} for this chat.`)
   })
 
   registerUserCommands(bot)
@@ -297,11 +340,9 @@ export function createBot(): Bot {
       const localPath = await downloadMedia(TELEGRAM_BOT_TOKEN, doc.file_id, doc.file_name)
       const caption = ctx.message?.caption ?? ''
       const filename = doc.file_name ?? path.basename(localPath)
-      await handleMessage(
-        ctx,
-        buildDocumentMessage(localPath, filename, caption),
-        { memoryText: caption || `[user sent a document: ${filename}]` },
-      )
+      await handleMessage(ctx, buildDocumentMessage(localPath, filename, caption), {
+        memoryText: caption || `[user sent a document: ${filename}]`,
+      })
     } catch (err) {
       log.error({ err }, 'document handler failed')
       await ctx.reply(`Document error: ${(err as Error).message}`).catch(() => {})
@@ -328,24 +369,19 @@ export async function sendToChat(chatId: string, text: string): Promise<void> {
   const formatted = formatForTelegram(text)
   for (const chunk of splitMessage(formatted)) {
     try {
-      await withRetry(
-        () => tmpBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' }),
-        { label: 'tg-send-html' },
-      )
+      await withRetry(() => tmpBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' }), {
+        label: 'tg-send-html',
+      })
     } catch (err) {
       if (isTransientError(err)) {
         logger.error({ err, chatId }, 'sendToChat HTML exhausted retries')
         continue
       }
       try {
-        await withRetry(
-          () => tmpBot.api.sendMessage(chatId, chunk),
-          { label: 'tg-send-plain' },
-        )
+        await withRetry(() => tmpBot.api.sendMessage(chatId, chunk), { label: 'tg-send-plain' })
       } catch (err2) {
         logger.error({ err: err2, chatId }, 'sendToChat plain failed')
       }
     }
   }
 }
-

@@ -10,7 +10,12 @@ import qrcodeTerminal from 'qrcode-terminal'
 import qrcode from 'qrcode'
 import { STORE_DIR } from '../config.js'
 import { logger } from '../logger.js'
-import type { WhatsAppClient, WhatsAppMessage, WhatsAppMessageHandler, WhatsAppSendReply } from './types.js'
+import type {
+  WhatsAppClient,
+  WhatsAppMessage,
+  WhatsAppMessageHandler,
+  WhatsAppSendReply,
+} from './types.js'
 
 const AUTH_DIR = path.join(STORE_DIR, 'whatsapp-auth')
 const QR_PATH = path.join(STORE_DIR, 'whatsapp-qr.png')
@@ -85,10 +90,7 @@ export function createBaileysClient(): WhatsAppClient {
         const jid = msg.key.remoteJid
         if (!jid) continue
 
-        const text =
-          msg.message.conversation ??
-          msg.message.extendedTextMessage?.text ??
-          ''
+        const text = msg.message.conversation ?? msg.message.extendedTextMessage?.text ?? ''
         if (!text) continue
 
         const waMsg: WhatsAppMessage = {
@@ -104,8 +106,13 @@ export function createBaileysClient(): WhatsAppClient {
           await sock.sendMessage(toJid, { text: body })
         }
 
+        const sendTyping = async (toJid: string) => {
+          if (!sock) return
+          await sock.sendPresenceUpdate('composing', toJid)
+        }
+
         try {
-          await msgHandler?.(waMsg, send)
+          await msgHandler?.(waMsg, send, sendTyping)
         } catch (err) {
           logger.error({ err, jid }, 'baileys: message handler threw')
         }

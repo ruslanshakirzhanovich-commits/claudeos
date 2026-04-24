@@ -19,6 +19,7 @@ vi.mock('../src/config.js', () => ({
   // Rate limit constants pulled by src/rate-limit.ts.
   RATE_LIMIT_CAPACITY: 10,
   RATE_LIMIT_REFILL_PER_MIN: 10,
+  RATE_LIMIT_MAX_TRACKED: 10_000,
   MEMORY_EPISODIC_CAP_PER_CHAT: 1000,
 }))
 
@@ -55,9 +56,8 @@ vi.mock('../src/logger.js', () => {
   return { logger: log }
 })
 
-const { handleDiscordMessage, chatIdForDiscordUser, chunkForDiscord } = await import(
-  '../src/discord/handler.js'
-)
+const { handleDiscordMessage, chatIdForDiscordUser, chunkForDiscord } =
+  await import('../src/discord/handler.js')
 
 function makeMsg(over: Partial<Parameters<typeof handleDiscordMessage>[0]> = {}) {
   return {

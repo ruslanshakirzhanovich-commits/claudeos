@@ -1,14 +1,20 @@
-import { isWhatsAppAuthorised, isWhatsAppNumberAdmin, MAX_MESSAGE_LENGTH } from '../config.js'
+import {
+  isWhatsAppAuthorised,
+  isWhatsAppNumberAdmin,
+  MAX_MESSAGE_LENGTH,
+  TYPING_REFRESH_MS,
+} from '../config.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
 import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
-import type { WhatsAppMessage, WhatsAppSendReply } from './types.js'
+import type { WhatsAppMessage, WhatsAppSendReply, WhatsAppSendTyping } from './types.js'
 
 export async function handleWhatsAppMessage(
   msg: WhatsAppMessage,
   send: WhatsAppSendReply,
+  sendTyping?: WhatsAppSendTyping,
 ): Promise<void> {
   const { jid, text, isGroup } = msg
   const log = logger.child({ channel: 'whatsapp', jid, isGroup })
@@ -26,16 +32,22 @@ export async function handleWhatsAppMessage(
 
   log.info({ preview: text.slice(0, 80) }, 'message received')
 
-  const wrappedText = wrapUntrusted(text, 'whatsapp_message', { from: number })
-  const result = await runChatPipeline({
-    chatId: jid,
-    userMessage: text,
-    wrappedUserMessage: wrappedText,
-    permissionMode: isWhatsAppNumberAdmin(number) ? 'bypassPermissions' : 'plan',
-    log,
-  })
+  const typingSafe = sendTyping ? (target: string) => sendTyping(target).catch(() => {}) : undefined
+  if (typingSafe) await typingSafe(jid)
+  const typingInterval = typingSafe
+    ? setInterval(() => void typingSafe(jid), TYPING_REFRESH_MS)
+    : null
 
   try {
+    const wrappedText = wrapUntrusted(text, 'whatsapp_message', { from: number })
+    const result = await runChatPipeline({
+      chatId: jid,
+      userMessage: text,
+      wrappedUserMessage: wrappedText,
+      permissionMode: isWhatsAppNumberAdmin(number) ? 'bypassPermissions' : 'plan',
+      log,
+    })
+
     if (result.kind === 'rate-limited') {
       await send(jid, rateLimitMessage(result.retryAfterMs))
       return
@@ -52,5 +64,7 @@ export async function handleWhatsAppMessage(
     }
   } catch (err) {
     log.error({ err }, 'whatsapp send failed')
+  } finally {
+    if (typingInterval) clearInterval(typingInterval)
   }
 }

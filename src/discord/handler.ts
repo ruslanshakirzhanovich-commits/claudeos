@@ -1,10 +1,10 @@
-import { isDiscordUserAuthorised, isDiscordUserAdmin } from '../config.js'
+import { isDiscordUserAuthorised, isDiscordUserAdmin, TYPING_REFRESH_MS } from '../config.js'
 import { logger } from '../logger.js'
 import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
 import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
-import type { DiscordIncomingMessage, DiscordSendReply } from './types.js'
+import type { DiscordIncomingMessage, DiscordSendReply, DiscordSendTyping } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
 const DISCORD_MESSAGE_LIMIT = 2000
@@ -20,6 +20,7 @@ export function chunkForDiscord(text: string, limit: number = DISCORD_MESSAGE_LI
 export async function handleDiscordMessage(
   msg: DiscordIncomingMessage,
   send: DiscordSendReply,
+  sendTyping?: DiscordSendTyping,
 ): Promise<void> {
   const log = logger.child({ channel: 'discord', userId: msg.userId, isDM: msg.isDM })
 
@@ -35,16 +36,26 @@ export async function handleDiscordMessage(
   const chatId = chatIdForDiscordUser(msg.userId)
   log.info({ preview: msg.text.slice(0, 80) }, 'message received')
 
-  const wrappedText = wrapUntrusted(msg.text, 'discord_message', { from: msg.authorTag })
-  const result = await runChatPipeline({
-    chatId,
-    userMessage: msg.text,
-    wrappedUserMessage: wrappedText,
-    permissionMode: isDiscordUserAdmin(msg.userId) ? 'bypassPermissions' : 'plan',
-    log,
-  })
+  // Discord's typing indicator lasts ~10s. Refresh on the same cadence as
+  // Telegram uses so long agent responses keep showing "typing…" instead of
+  // the UI falling silent. Errors are swallowed — if we can't emit typing,
+  // the user still gets the reply.
+  const typingSafe = sendTyping ? (id: string) => sendTyping(id).catch(() => {}) : undefined
+  if (typingSafe) await typingSafe(msg.channelId)
+  const typingInterval = typingSafe
+    ? setInterval(() => void typingSafe(msg.channelId), TYPING_REFRESH_MS)
+    : null
 
   try {
+    const wrappedText = wrapUntrusted(msg.text, 'discord_message', { from: msg.authorTag })
+    const result = await runChatPipeline({
+      chatId,
+      userMessage: msg.text,
+      wrappedUserMessage: wrappedText,
+      permissionMode: isDiscordUserAdmin(msg.userId) ? 'bypassPermissions' : 'plan',
+      log,
+    })
+
     if (result.kind === 'rate-limited') {
       await send(msg.channelId, rateLimitMessage(result.retryAfterMs))
       return
@@ -61,5 +72,7 @@ export async function handleDiscordMessage(
     }
   } catch (err) {
     log.error({ err }, 'discord send failed')
+  } finally {
+    if (typingInterval) clearInterval(typingInterval)
   }
 }

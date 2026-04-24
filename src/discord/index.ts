@@ -21,10 +21,7 @@ function createClient(): DiscordClient {
         // GuildMessages were unused — their gateway events were skipped
         // in the handler, and GuildMessages becomes a Discord-approval
         // gate once the bot joins 100+ servers.
-        intents: [
-          GatewayIntentBits.DirectMessages,
-          GatewayIntentBits.MessageContent,
-        ],
+        intents: [GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
         // DMChannel arrives as a partial on first contact — without these,
         // the messageCreate event fires with `channel.type` undefined.
         partials: [Partials.Channel, Partials.Message],
@@ -53,6 +50,17 @@ function createClient(): DiscordClient {
               const ch = await client.channels.fetch(channelId)
               if (ch && 'send' in ch && typeof (ch as { send?: unknown }).send === 'function') {
                 await (ch as { send: (t: string) => Promise<unknown> }).send(text)
+              }
+            },
+            async (channelId: string) => {
+              if (!client) return
+              const ch = await client.channels.fetch(channelId)
+              if (
+                ch &&
+                'sendTyping' in ch &&
+                typeof (ch as { sendTyping?: unknown }).sendTyping === 'function'
+              ) {
+                await (ch as { sendTyping: () => Promise<unknown> }).sendTyping()
               }
             },
           )

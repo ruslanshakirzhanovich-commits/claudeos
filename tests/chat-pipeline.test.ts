@@ -8,6 +8,7 @@ vi.mock('../src/config.js', () => ({
   EFFORT_TOKENS_XHIGH: 65536,
   RATE_LIMIT_CAPACITY: 2,
   RATE_LIMIT_REFILL_PER_MIN: 1,
+  RATE_LIMIT_MAX_TRACKED: 10_000,
 }))
 
 const runAgentSpy = vi.fn()
@@ -48,9 +49,27 @@ describe('runChatPipeline', () => {
   it('returns rate-limited when the bucket is empty', async () => {
     // Capacity is 2 in the mocked config; third call should fail.
     runAgentSpy.mockResolvedValue({ text: 'ok' })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: '<u>hi</u>', permissionMode: 'plan', log })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: '<u>hi</u>', permissionMode: 'plan', log })
-    const result = await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: '<u>hi</u>', permissionMode: 'plan', log })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: '<u>hi</u>',
+      permissionMode: 'plan',
+      log,
+    })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: '<u>hi</u>',
+      permissionMode: 'plan',
+      log,
+    })
+    const result = await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: '<u>hi</u>',
+      permissionMode: 'plan',
+      log,
+    })
     expect(result.kind).toBe('rate-limited')
     if (result.kind === 'rate-limited') {
       expect(result.retryAfterMs).toBeGreaterThan(0)
@@ -93,30 +112,60 @@ describe('runChatPipeline', () => {
 
   it('persists a new session id only when the agent returns one', async () => {
     runAgentSpy.mockResolvedValueOnce({ text: 'ok', newSessionId: 'sess-123' })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: 'hi', permissionMode: 'plan', log })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: 'hi',
+      permissionMode: 'plan',
+      log,
+    })
     expect(setSessionSpy).toHaveBeenCalledWith('a', 'sess-123')
 
     setSessionSpy.mockReset()
     runAgentSpy.mockResolvedValueOnce({ text: 'ok' })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: 'hi', permissionMode: 'plan', log })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: 'hi',
+      permissionMode: 'plan',
+      log,
+    })
     expect(setSessionSpy).not.toHaveBeenCalled()
   })
 
   it('saves a conversation turn only when the agent returned text', async () => {
     runAgentSpy.mockResolvedValueOnce({ text: 'reply' })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: 'hi', permissionMode: 'plan', log })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: 'hi',
+      permissionMode: 'plan',
+      log,
+    })
     expect(saveTurnSpy).toHaveBeenCalledWith('a', 'hi', 'reply')
 
     saveTurnSpy.mockClear()
     runAgentSpy.mockResolvedValueOnce({ text: null })
-    await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: 'hi', permissionMode: 'plan', log })
+    await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: 'hi',
+      permissionMode: 'plan',
+      log,
+    })
     expect(saveTurnSpy).not.toHaveBeenCalled()
   })
 
   it('returns an error result (not throw) when the agent fails', async () => {
     const err = new Error('claude down')
     runAgentSpy.mockRejectedValueOnce(err)
-    const result = await runChatPipeline({ chatId: 'a', userMessage: 'hi', wrappedUserMessage: 'hi', permissionMode: 'plan', log })
+    const result = await runChatPipeline({
+      chatId: 'a',
+      userMessage: 'hi',
+      wrappedUserMessage: 'hi',
+      permissionMode: 'plan',
+      log,
+    })
     expect(result).toEqual({ kind: 'error', error: err })
   })
 })

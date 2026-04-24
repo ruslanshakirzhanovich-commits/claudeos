@@ -8,9 +8,15 @@ export interface WhatsAppMessage {
 
 export type WhatsAppSendReply = (jid: string, text: string) => Promise<void>
 
+// "User is typing" presence hint toward the given jid. Implementations that
+// can't express this (e.g. WhatsApp Cloud/Meta API) can simply omit the
+// callback — the handler treats it as optional.
+export type WhatsAppSendTyping = (jid: string) => Promise<void>
+
 export type WhatsAppMessageHandler = (
   msg: WhatsAppMessage,
   send: WhatsAppSendReply,
+  sendTyping?: WhatsAppSendTyping,
 ) => Promise<void>
 
 export interface WhatsAppClient {

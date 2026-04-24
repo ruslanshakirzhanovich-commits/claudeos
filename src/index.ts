@@ -18,8 +18,21 @@ import {
   MEMORY_SUMMARIZE_MIN_AGE_DAYS,
   MEMORY_SUMMARIZE_BATCH,
   MEMORY_SUMMARIZE_MIN_BATCH,
+  HEALTH_ENABLED,
+  HEALTH_HOST,
+  HEALTH_PORT,
+  WHATSAPP_ENABLED,
+  DISCORD_ENABLED,
 } from './config.js'
-import { initDatabase, seedAllowedChatsFromEnv, isOpenMode, closeDb } from './db.js'
+import {
+  initDatabase,
+  seedAllowedChatsFromEnv,
+  isOpenMode,
+  closeDb,
+  getSchemaVersion,
+} from './db.js'
+import { startHealthServer, type HealthServer } from './health.js'
+import { BOT_VERSION } from './version.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
 import { logger } from './logger.js'
 import { createBot, sendToChat } from './bot.js'
@@ -117,13 +130,20 @@ async function main(): Promise<void> {
   if (isOpenMode()) {
     logger.warn(
       '⚠️  OPEN MODE: allowed_chats is empty and ALLOWED_CHAT_IDS env is unset — ' +
-      'the bot will accept messages from ANY Telegram chat. Intended only for ' +
-      'first-run bootstrap. Set ALLOWED_CHAT_IDS in .env or use /adduser to close the door.',
+        'the bot will accept messages from ANY Telegram chat. Intended only for ' +
+        'first-run bootstrap. Set ALLOWED_CHAT_IDS in .env or use /adduser to close the door.',
     )
   }
 
-  runDecaySweep()
-  const decayTimer = setInterval(runDecaySweep, DECAY_INTERVAL_MS)
+  // runDecaySweep is async now (batched cap yields to the event loop).
+  // Fire-and-forget is fine for the periodic sweep: errors are already
+  // logged inside runDecaySweep, and a failed sweep should not crash the
+  // process or block startup.
+  void runDecaySweep()
+  const decayTimer = setInterval(
+    () => void runDecaySweep().catch((err) => logger.error({ err }, 'decay sweep crashed')),
+    DECAY_INTERVAL_MS,
+  )
 
   cleanupOldUploads()
   cleanupOldPreviews()
@@ -145,6 +165,31 @@ async function main(): Promise<void> {
     : null
   if (!BACKUP_SCHEDULE_ENABLED) {
     logger.warn('BACKUP_SCHEDULE_ENABLED=0 — automatic backups disabled')
+  }
+
+  const startedAt = Date.now()
+  let healthServer: HealthServer | null = null
+  if (HEALTH_ENABLED) {
+    try {
+      healthServer = await startHealthServer({
+        host: HEALTH_HOST,
+        port: HEALTH_PORT,
+        source: () => ({
+          ok: true,
+          uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
+          version: BOT_VERSION,
+          schemaVersion: getSchemaVersion(),
+          channels: {
+            telegram: TELEGRAM_BOT_TOKEN ? 'ok' : 'disabled',
+            discord: DISCORD_ENABLED ? 'ok' : 'disabled',
+            whatsapp: WHATSAPP_ENABLED ? 'ok' : 'disabled',
+          },
+        }),
+      })
+      logger.info({ host: HEALTH_HOST, port: healthServer.port }, 'health endpoint listening')
+    } catch (err) {
+      logger.warn({ err }, 'health endpoint failed to start (continuing without)')
+    }
   }
 
   let summarizeTimer: NodeJS.Timeout | null = null
@@ -201,6 +246,13 @@ async function main(): Promise<void> {
       logger.warn({ remaining }, 'exiting with inflight work still running')
     }
     if (previewServer) previewServer.close()
+    if (healthServer) {
+      try {
+        await healthServer.stop()
+      } catch {
+        /* ignore */
+      }
+    }
     closeDb()
     releaseLock()
     process.exit(0)

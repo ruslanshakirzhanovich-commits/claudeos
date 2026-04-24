@@ -9,9 +9,15 @@ export interface DiscordIncomingMessage {
 
 export type DiscordSendReply = (channelId: string, text: string) => Promise<void>
 
+// Emit a "user is typing" hint in the given channel. Should succeed quickly
+// and can be called repeatedly; Discord coalesces. Optional at the handler
+// boundary so callers that don't care about typing indicators still work.
+export type DiscordSendTyping = (channelId: string) => Promise<void>
+
 export type DiscordMessageHandler = (
   msg: DiscordIncomingMessage,
   send: DiscordSendReply,
+  sendTyping?: DiscordSendTyping,
 ) => Promise<void>
 
 export interface DiscordClient {
