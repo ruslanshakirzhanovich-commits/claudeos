@@ -420,6 +420,76 @@ export function optimizeFts(): void {
   db.exec(`INSERT INTO memories_fts(memories_fts, rank) VALUES('merge', -16)`)
 }
 
+export interface StaleEpisodic {
+  id: number
+  content: string
+  created_at: number
+}
+
+// Which chats have >= minCount episodic rows older than cutoffMs. Used by
+// the summarize sweep to pick candidates without walking every chat.
+export function listChatsWithStaleEpisodic(
+  cutoffMs: number,
+  minCount: number,
+): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT chat_id, COUNT(*) AS c FROM memories
+        WHERE sector = 'episodic' AND created_at < ?
+        GROUP BY chat_id
+       HAVING c >= ?`,
+    )
+    .all(cutoffMs, minCount) as Array<{ chat_id: string; c: number }>
+  return rows.map((r) => r.chat_id)
+}
+
+// Oldest stale episodic rows for one chat, for folding into a summary.
+// Ordered oldest-first so the summary reads chronologically.
+export function getStaleEpisodicForChat(
+  chatId: string,
+  cutoffMs: number,
+  limit: number,
+): StaleEpisodic[] {
+  return getDb()
+    .prepare(
+      `SELECT id, content, created_at FROM memories
+        WHERE chat_id = ? AND sector = 'episodic' AND created_at < ?
+        ORDER BY created_at ASC
+        LIMIT ?`,
+    )
+    .all(chatId, cutoffMs, limit) as StaleEpisodic[]
+}
+
+// Atomic swap: insert the summary as a semantic row, then delete the
+// episodic rows it replaces. Both in one transaction so a crash between
+// them can't produce a summary without sources or sources without a
+// summary. No-op if ids is empty or summary is blank.
+export function replaceEpisodicWithSummary(
+  chatId: string,
+  episodicIds: number[],
+  summaryContent: string,
+): { inserted: number; deleted: number } {
+  if (!episodicIds.length || !summaryContent.trim()) {
+    return { inserted: 0, deleted: 0 }
+  }
+  const db = getDb()
+  const insertStmt = db.prepare(
+    `INSERT INTO memories (chat_id, content, sector, salience, created_at, accessed_at)
+     VALUES (?, ?, 'semantic', 1.0, ?, ?)`,
+  )
+  const placeholders = episodicIds.map(() => '?').join(',')
+  const deleteStmt = db.prepare(
+    `DELETE FROM memories WHERE sector = 'episodic' AND id IN (${placeholders})`,
+  )
+  const tx = db.transaction(() => {
+    const now = Date.now()
+    const insInfo = insertStmt.run(chatId, summaryContent, now, now)
+    const delInfo = deleteStmt.run(...episodicIds)
+    return { inserted: Number(insInfo.changes), deleted: Number(delInfo.changes) }
+  })
+  return tx()
+}
+
 // Keep at most `cap` episodic memories per chat. Drops the oldest by
 // accessed_at so the active conversation's context survives even after
 // a long idle period. Semantic memories are never touched — they carry

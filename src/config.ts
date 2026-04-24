@@ -90,6 +90,23 @@ export const MEMORY_EPISODIC_CAP_PER_CHAT = Math.max(
   Number(env['MEMORY_EPISODIC_CAP_PER_CHAT'] ?? '1000') || 1000,
 )
 
+// Episodic-to-semantic consolidation. Off by default: it costs tokens on
+// every tick. When on, once per interval we collect a chat's oldest
+// episodic rows, fold them into a single semantic summary via the agent
+// SDK, and delete the originals in one transaction. MIN_BATCH guards
+// against consolidating three trivia lines into a bland summary.
+export const MEMORY_SUMMARIZE_ENABLED = (env['MEMORY_SUMMARIZE_ENABLED'] ?? '').trim() === '1'
+export const MEMORY_SUMMARIZE_INTERVAL_HOURS = readPositiveInt(
+  'MEMORY_SUMMARIZE_INTERVAL_HOURS',
+  168,
+)
+export const MEMORY_SUMMARIZE_MIN_AGE_DAYS = readPositiveInt(
+  'MEMORY_SUMMARIZE_MIN_AGE_DAYS',
+  7,
+)
+export const MEMORY_SUMMARIZE_BATCH = readPositiveInt('MEMORY_SUMMARIZE_BATCH', 50)
+export const MEMORY_SUMMARIZE_MIN_BATCH = readPositiveInt('MEMORY_SUMMARIZE_MIN_BATCH', 10)
+
 export const BACKUP_SCHEDULE_ENABLED = (env['BACKUP_SCHEDULE_ENABLED'] ?? '1').trim() !== '0'
 export const BACKUP_INTERVAL_HOURS = Math.max(1, Number(env['BACKUP_INTERVAL_HOURS'] ?? '24') || 24)
 export const BACKUP_KEEP = Math.max(1, Number(env['BACKUP_KEEP'] ?? '7') || 7)

@@ -13,6 +13,11 @@ import {
   BACKUP_SCHEDULE_ENABLED,
   BACKUP_INTERVAL_HOURS,
   BACKUP_KEEP,
+  MEMORY_SUMMARIZE_ENABLED,
+  MEMORY_SUMMARIZE_INTERVAL_HOURS,
+  MEMORY_SUMMARIZE_MIN_AGE_DAYS,
+  MEMORY_SUMMARIZE_BATCH,
+  MEMORY_SUMMARIZE_MIN_BATCH,
 } from './config.js'
 import { initDatabase, seedAllowedChatsFromEnv, isOpenMode, closeDb } from './db.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
@@ -28,6 +33,7 @@ import { createChannelRouter } from './channel-router.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
 import { recordCrash } from './metrics.js'
+import { runMemorySummarizeSweep, summarizeViaAgentSdk } from './memory-summarize.js'
 
 const INFLIGHT_DRAIN_TIMEOUT_MS = 30_000
 
@@ -141,6 +147,39 @@ async function main(): Promise<void> {
     logger.warn('BACKUP_SCHEDULE_ENABLED=0 — automatic backups disabled')
   }
 
+  let summarizeTimer: NodeJS.Timeout | null = null
+  let summarizeRunning = false
+  if (MEMORY_SUMMARIZE_ENABLED) {
+    const summarizeCfg = {
+      minAgeDays: MEMORY_SUMMARIZE_MIN_AGE_DAYS,
+      batch: MEMORY_SUMMARIZE_BATCH,
+      minBatch: MEMORY_SUMMARIZE_MIN_BATCH,
+    }
+    const runSummarize = async (): Promise<void> => {
+      if (summarizeRunning) {
+        logger.warn('memory summarize sweep skipped — previous run still in flight')
+        return
+      }
+      summarizeRunning = true
+      try {
+        const result = await runMemorySummarizeSweep(summarizeCfg, summarizeViaAgentSdk)
+        logger.info({ ...result }, 'memory summarize sweep complete')
+      } catch (err) {
+        logger.warn({ err }, 'memory summarize sweep failed')
+      } finally {
+        summarizeRunning = false
+      }
+    }
+    // First sweep 10 min after start to avoid hammering the SDK during boot,
+    // then on the configured interval. Each tick is guarded by the
+    // summarizeRunning lock so a slow sweep can't stack up.
+    setTimeout(() => void runSummarize(), 10 * 60 * 1000)
+    summarizeTimer = setInterval(
+      () => void runSummarize(),
+      MEMORY_SUMMARIZE_INTERVAL_HOURS * 60 * 60 * 1000,
+    )
+  }
+
   let shuttingDown = false
   const shutdown = async (signal: string) => {
     if (shuttingDown) return
@@ -149,6 +188,7 @@ async function main(): Promise<void> {
     clearInterval(decayTimer)
     clearInterval(schedulerTimer)
     if (backupTimer) clearInterval(backupTimer)
+    if (summarizeTimer) clearInterval(summarizeTimer)
     try {
       await bot.stop()
     } catch {
