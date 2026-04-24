@@ -4,7 +4,7 @@ import {
   getStaleEpisodicForChat,
   replaceEpisodicWithSummary,
 } from './db.js'
-import { PROJECT_ROOT, CLAUDE_MODEL } from './config.js'
+import { PROJECT_ROOT, CLAUDE_MODEL, SUMMARIZE_TIMEOUT_MS } from './config.js'
 import { logger, type Logger } from './logger.js'
 
 export type SummarizeFn = (text: string) => Promise<string>
@@ -77,6 +77,11 @@ export async function runMemorySummarizeSweep(
 // Real summarize backend. Uses the agent SDK in plan mode, without the
 // project's settingSources, so the call stays short (no CLAUDE.md
 // persona prelude) and can't run tools or touch the filesystem.
+//
+// Bounded by SUMMARIZE_TIMEOUT_MS via Promise.race: when the timer fires
+// we abort the SDK stream and reject with 'summarize timeout'. The sweep's
+// catch block turns this into a per-chat error and continues to the next
+// chat, rather than stalling the whole 24-hour consolidation.
 export async function summarizeViaAgentSdk(text: string): Promise<string> {
   const prompt = [
     'Below are conversation snippets between a user and their personal AI assistant.',
@@ -89,19 +94,38 @@ export async function summarizeViaAgentSdk(text: string): Promise<string> {
     '--- snippets end ---',
     'Summary:',
   ].join('\n')
+
+  const abortController = new AbortController()
   const options: Record<string, unknown> = {
     cwd: PROJECT_ROOT,
     settingSources: [],
     permissionMode: 'plan',
+    abortController,
   }
   if (CLAUDE_MODEL) options['model'] = CLAUDE_MODEL
 
-  const stream = query({ prompt, options: options as any })
-  let result = ''
-  for await (const event of stream as AsyncIterable<any>) {
-    if (event?.type === 'result') {
-      result = typeof event.result === 'string' ? event.result : (event.result?.result ?? '')
+  const consume = async (): Promise<string> => {
+    const stream = query({ prompt, options: options as any })
+    let result = ''
+    for await (const event of stream as AsyncIterable<any>) {
+      if (event?.type === 'result') {
+        result = typeof event.result === 'string' ? event.result : (event.result?.result ?? '')
+      }
     }
+    return result.trim()
   }
-  return result.trim()
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      abortController.abort()
+      reject(new Error('summarize timeout'))
+    }, SUMMARIZE_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([consume(), timeoutPromise])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
