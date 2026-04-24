@@ -2,6 +2,24 @@
 
 Все заметные изменения ClaudeClaw.
 
+## [1.5.0] - 2026-04-24
+- 🧠 Русский в классификаторе identity: `classifyMemory()` с Unicode-aware границами (JS `\b` не работает на кириллице). Identity-факты русскоязычных пользователей больше не тонут в episodic.
+- 💰 CLAUDE.md через SDK `systemPrompt` preset вместо ручной инъекции в user prompt — автоматический system-prompt cache заработал, двойной токен-счёт устранён.
+- 🔁 `runAgent` обёрнут в `withRetry` с `streamStarted`-гардом: ретрай только для 429/529/5xx/ECONN* и только пока SDK не начал эмитить события (tool-calls не повторяются).
+- ⛑ `maxTurns=25` и `AbortController` с таймаутом 120с: агент не может уйти в бесконечный tool-use loop или повиснуть на пустом стриме.
+- 🗝 `identity_facts` — новая curated-таблица + команды `/remember <fact>`, `/facts`, `/forgetfact <id>`. Факты идут отдельным блоком в memory-context и не подвержены decay/cap.
+- 🛡 `assertSafeBackupPath()` — валидация абсолютного пути, allowed-dir prefix, whitelist-regex имени файла перед `VACUUM INTO`.
+- 📊 `recordUsage` стал кумулятивным: `COALESCE(x,0) + excluded.x` + `MAX()` для contextWindow. Race с `recordCompaction` невозможна по построению.
+- 🛌 Decay и delete теперь только на episodic: semantic-факты больше не испаряются по времени.
+- 🧹 `capEpisodicMemoriesBatched` — async, LIMIT + `setImmediate` между пассами. Дневной sweep не блокирует event loop.
+- 🚧 Protection для episodic cap: `protectMinSalience` + `protectCreatedAfterMs` — свежие и high-salience записи переживают cap.
+- 🪣 Rate-limit buckets бэкнуты LRU (`RATE_LIMIT_MAX_TRACKED=10000`): высококардинальный поток chat_id не течёт в OOM.
+- 👉 Typing-indicator в Discord (`channel.sendTyping()`) и WhatsApp/baileys (`sendPresenceUpdate('composing')`) — паритет с Telegram.
+- 🩺 Health endpoint на `127.0.0.1:9090`: `/health` (JSON snapshot + 503 при ok=false), `/ready` (liveness). Интегрирован в graceful shutdown.
+- 🧰 ESLint 9 (flat config) + Prettier + pre-commit hook (`npm run install-hooks`, без husky); CI расширен lint + format:check шагами.
+- 🗂 Миграция 6: таблица `identity_facts` с unique `(chat_id, fact_normalized)`.
+- 🧪 264 теста (было 177 в 1.4.0): agent-system-prompt, agent-retry, agent-guards, agent-stream-e2e, backup-path-validation, usage-cumulative, memory-classify, memory-decay-semantic, memory-identity-context, identity-facts, rate-limit-lru, discord-typing, whatsapp-typing, health.
+
 ## [1.4.0] - 2026-04-24
 - 🔐 Preview-сервер: fail-fast на публичный bind без `PREVIEW_PASSWORD`, дефолт 127.0.0.1, 401 вместо pass-through
 - 🛡 `permissionMode` обязателен в `runAgent` — убран дефолт `bypassPermissions`, runtime-guard для JS-вызовов
