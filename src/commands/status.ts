@@ -14,6 +14,7 @@ import {
   countMemories,
   getPreferredModel,
   getEffortLevel,
+  countMissedRuns,
 } from '../db.js'
 import { isEffortLevel, effortLabel, CHAT_DEFAULT_EFFORT } from '../effort.js'
 import { voiceCapabilities } from '../voice.js'
@@ -54,6 +55,7 @@ export function registerStatus(bot: Bot): void {
     const sessionMeta = getSessionMeta(chatId)
     const tts = getTtsEnabled(chatId)
     const memories = countMemories(chatId)
+    const missed = countMissedRuns()
     const perChatModel = getPreferredModel(chatId)
     const rawEffort = getEffortLevel(chatId)
     const effort = isEffortLevel(rawEffort) ? rawEffort : null
@@ -109,6 +111,15 @@ export function registerStatus(bot: Bot): void {
       `🗄 Cache: ${cacheLine}`,
       `📚 Context: ${contextLine}`,
       `🧠 Memories: ${memories} for this chat`,
+      ...(missed.totalMissed > 0
+        ? [
+            `⏰ Missed ticks: ${missed.totalMissed} across ${missed.tasksWithMisses} tasks${
+              missed.mostRecent
+                ? ` · last ${formatAgo(missed.mostRecent.at)} (<code>${missed.mostRecent.id}</code>)`
+                : ''
+            }`,
+          ]
+        : []),
       `🗣 Voice: ${voiceLine}`,
       `🌐 Bot features: ${featuresLine}`,
       `⏳ Inflight agents: ${inflightCount()}`,
