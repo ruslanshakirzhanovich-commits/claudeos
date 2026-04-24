@@ -1,9 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-} from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import qrcodeTerminal from 'qrcode-terminal'
 import qrcode from 'qrcode'

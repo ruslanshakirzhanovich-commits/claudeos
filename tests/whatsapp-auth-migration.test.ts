@@ -46,9 +46,7 @@ describe('migratePlainAuthFiles', () => {
 
     expect(res).toEqual({ migrated: 3, alreadyEncrypted: 0 })
     const names = fs.readdirSync(dir).sort()
-    expect(names).toEqual(
-      ['creds.json.enc', 'pre-key-1.json.enc', 'pre-key-2.json.enc'].sort(),
-    )
+    expect(names).toEqual(['creds.json.enc', 'pre-key-1.json.enc', 'pre-key-2.json.enc'].sort())
 
     const ct = fs.readFileSync(path.join(dir, 'creds.json.enc'))
     const pt = decrypt(ct, k)
@@ -76,10 +74,7 @@ describe('migratePlainAuthFiles', () => {
     expect(fs.existsSync(path.join(dir, 'creds.json.enc'))).toBe(true)
     expect(fs.readFileSync(path.join(dir, 'creds.json.enc')).toString('utf8')).toBe('fake')
     expect(res.alreadyEncrypted).toBeGreaterThanOrEqual(1)
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.stringContaining('partial'),
-    )
+    expect(warnSpy).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('partial'))
   })
 
   it('noops on empty directory', async () => {

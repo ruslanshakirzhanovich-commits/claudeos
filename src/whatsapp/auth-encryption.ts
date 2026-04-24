@@ -82,11 +82,7 @@ async function writeEncrypted(
   await fs.promises.rename(tmp, target)
 }
 
-async function readEncrypted(
-  folder: string,
-  name: string,
-  key: Buffer,
-): Promise<unknown | null> {
+async function readEncrypted(folder: string, name: string, key: Buffer): Promise<unknown | null> {
   const target = encFilePath(folder, name)
   let raw: Buffer
   try {
@@ -163,10 +159,7 @@ export interface MigrationResult {
   alreadyEncrypted: number
 }
 
-export async function migratePlainAuthFiles(
-  folder: string,
-  key: Buffer,
-): Promise<MigrationResult> {
+export async function migratePlainAuthFiles(folder: string, key: Buffer): Promise<MigrationResult> {
   await fs.promises.mkdir(folder, { recursive: true })
   const entries = await fs.promises.readdir(folder)
   const set = new Set(entries)
