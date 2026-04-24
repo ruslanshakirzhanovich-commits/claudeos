@@ -5,6 +5,8 @@ type EventKind =
   | 'agent_error'
   | 'scheduler_skip'
   | 'scheduler_run'
+  | 'scheduler_missed'
+  | 'scheduler_hang'
   | 'backup_ok'
   | 'backup_fail'
 
@@ -13,6 +15,8 @@ const totals: Record<EventKind, number> = {
   agent_error: 0,
   scheduler_skip: 0,
   scheduler_run: 0,
+  scheduler_missed: 0,
+  scheduler_hang: 0,
   backup_ok: 0,
   backup_fail: 0,
 }
@@ -22,6 +26,8 @@ const recent: Record<EventKind, number[]> = {
   agent_error: [],
   scheduler_skip: [],
   scheduler_run: [],
+  scheduler_missed: [],
+  scheduler_hang: [],
   backup_ok: [],
   backup_fail: [],
 }
