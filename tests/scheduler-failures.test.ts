@@ -10,6 +10,8 @@ const mockTasks: Array<{
   last_result: string | null
   status: 'active' | 'paused'
   created_at: number
+  missed_runs: number
+  last_missed_at: number | null
 }> = []
 
 const updateSpy = vi.fn()
@@ -17,8 +19,15 @@ const runAgentSpy = vi.fn()
 
 vi.mock('../src/db.js', () => ({
   getDueTasks: () => [...mockTasks],
-  updateTaskAfterRun: (id: string, nextRun: number, result: string) => {
+  updateTaskAfterRun: (
+    id: string,
+    nextRun: number,
+    result: string,
+    _missedDelta: number,
+    _lastMissedAt: number | null,
+  ) => {
     updateSpy(id, nextRun, result)
+    return 1
   },
   createTask: () => {},
 }))
@@ -48,6 +57,8 @@ function makeTask(id: string): (typeof mockTasks)[number] {
     last_result: null,
     status: 'active',
     created_at: Date.now() - 86400_000,
+    missed_runs: 0,
+    last_missed_at: null,
   }
 }
 

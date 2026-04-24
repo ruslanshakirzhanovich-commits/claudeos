@@ -52,6 +52,8 @@ export function createScheduledTask(
     last_result: null,
     status: 'active',
     created_at: Date.now(),
+    missed_runs: 0,
+    last_missed_at: null,
   }
 }
 
@@ -72,7 +74,7 @@ export async function runDueTasks(send: Sender): Promise<void> {
       const result = text ?? '(no output)'
       await send(task.chat_id, result)
       const nextRun = computeNextRun(task.schedule)
-      updateTaskAfterRun(task.id, nextRun, result)
+      updateTaskAfterRun(task.id, nextRun, result, 0, null)
     } catch (err) {
       const msg = (err as Error).message ?? String(err)
       logger.error({ err, id: task.id }, 'scheduled task failed')
@@ -83,7 +85,7 @@ export async function runDueTasks(send: Sender): Promise<void> {
       }
       try {
         const nextRun = computeNextRun(task.schedule)
-        updateTaskAfterRun(task.id, nextRun, `ERROR: ${msg}`)
+        updateTaskAfterRun(task.id, nextRun, `ERROR: ${msg}`, 0, null)
       } catch {
         /* ignore */
       }

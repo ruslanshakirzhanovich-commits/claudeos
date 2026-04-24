@@ -718,10 +718,15 @@ export interface ScheduledTask {
   last_result: string | null
   status: 'active' | 'paused'
   created_at: number
+  missed_runs: number
+  last_missed_at: number | null
 }
 
 export function createTask(
-  task: Omit<ScheduledTask, 'last_run' | 'last_result' | 'created_at'>,
+  task: Omit<
+    ScheduledTask,
+    'last_run' | 'last_result' | 'created_at' | 'missed_runs' | 'last_missed_at'
+  >,
 ): void {
   getDb()
     .prepare(
@@ -756,14 +761,56 @@ export function getDueTasks(): ScheduledTask[] {
     .all(Date.now()) as ScheduledTask[]
 }
 
-export function updateTaskAfterRun(id: string, nextRun: number, result: string): void {
-  getDb()
+export function updateTaskAfterRun(
+  id: string,
+  nextRun: number,
+  result: string,
+  missedDelta: number,
+  lastMissedAt: number | null,
+): number {
+  const info = getDb()
     .prepare(
       `UPDATE scheduled_tasks
-       SET last_run = ?, last_result = ?, next_run = ?
+       SET last_run = ?,
+           last_result = ?,
+           next_run = ?,
+           missed_runs = missed_runs + ?,
+           last_missed_at = COALESCE(?, last_missed_at)
        WHERE id = ?`,
     )
-    .run(Date.now(), result.slice(0, 500), nextRun, id)
+    .run(Date.now(), result.slice(0, 500), nextRun, missedDelta, lastMissedAt, id)
+  return Number(info.changes)
+}
+
+export interface MissedRunsSummary {
+  totalMissed: number
+  tasksWithMisses: number
+  mostRecent: { id: string; at: number } | null
+}
+
+export function countMissedRuns(): MissedRunsSummary {
+  const totals = getDb()
+    .prepare(
+      `SELECT
+         COALESCE(SUM(missed_runs), 0) AS total,
+         SUM(CASE WHEN missed_runs > 0 THEN 1 ELSE 0 END) AS tasks
+       FROM scheduled_tasks`,
+    )
+    .get() as { total: number; tasks: number }
+  const recent = getDb()
+    .prepare(
+      `SELECT id, last_missed_at AS at
+       FROM scheduled_tasks
+       WHERE last_missed_at IS NOT NULL
+       ORDER BY last_missed_at DESC
+       LIMIT 1`,
+    )
+    .get() as { id: string; at: number } | undefined
+  return {
+    totalMissed: Number(totals.total ?? 0),
+    tasksWithMisses: Number(totals.tasks ?? 0),
+    mostRecent: recent ? { id: recent.id, at: Number(recent.at) } : null,
+  }
 }
 
 export function setTaskStatus(id: string, status: 'active' | 'paused'): void {
