@@ -41,7 +41,7 @@ interface LastIncident {
 let lastCrash: LastIncident | null = null
 let lastBackupAt: number | null = null
 
-export function recordEvent(kind: EventKind): void {
+export function recordEvent(kind: EventKind, _payload?: Record<string, unknown>): void {
   totals[kind]++
   const arr = recent[kind]
   const now = Date.now()

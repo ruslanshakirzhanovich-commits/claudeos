@@ -57,12 +57,51 @@ export function createScheduledTask(
   }
 }
 
+const MAX_MISSED_WINDOW = 50
+
+function countMissedTicks(
+  schedule: string,
+  since: number,
+  now: number,
+): { missed: number; capped: boolean } {
+  if (since >= now) return { missed: 0, capped: false }
+  let count = 0
+  let capped = false
+  try {
+    const it = parseExpression(schedule, { currentDate: new Date(since) })
+    for (let i = 0; i < MAX_MISSED_WINDOW; i++) {
+      const next = it.next().getTime()
+      if (next > now) break
+      count++
+      if (i === MAX_MISSED_WINDOW - 1) capped = true
+    }
+  } catch {
+    return { missed: 0, capped: false }
+  }
+  // `count` includes the tick that represents the current run. Missed = count - 1.
+  return { missed: Math.max(0, count - 1), capped }
+}
+
 export async function runDueTasks(send: Sender): Promise<void> {
   const tasks = getDueTasks()
   for (const task of tasks) {
-    logger.info({ id: task.id, prompt: task.prompt.slice(0, 60) }, 'running scheduled task')
+    const now = Date.now()
+    const since = task.last_run ?? task.created_at
+    const { missed, capped } = countMissedTicks(task.schedule, since, now)
+
+    if (missed > 0) {
+      logger.warn({ id: task.id, missed, capped }, 'scheduled task had missed ticks')
+      recordEvent(
+        'scheduler_missed',
+        capped ? { id: task.id, missed, capped: true } : { id: task.id, missed },
+      )
+    }
+
+    const prefix = missed > 0 ? `(missed ${missed}) ` : ''
+    logger.info({ id: task.id, prompt: task.prompt.slice(0, 60), missed }, 'running scheduled task')
+
     try {
-      await send(task.chat_id, `Running scheduled task: ${task.prompt.slice(0, 120)}`)
+      await send(task.chat_id, `${prefix}Running scheduled task: ${task.prompt.slice(0, 120)}`)
       recordEvent('scheduler_run')
       // Scheduled tasks are admin-created via CLI — keep full permissions.
       // Pass chatId so token usage is attributed to the owning chat (visible
@@ -72,20 +111,40 @@ export async function runDueTasks(send: Sender): Promise<void> {
         chatId: task.chat_id,
       })
       const result = text ?? '(no output)'
-      await send(task.chat_id, result)
       const nextRun = computeNextRun(task.schedule)
-      updateTaskAfterRun(task.id, nextRun, result, 0, null)
+      const changes = updateTaskAfterRun(
+        task.id,
+        nextRun,
+        result,
+        missed,
+        missed > 0 ? now : null,
+      )
+      if (changes === 0) {
+        logger.warn({ id: task.id }, 'task disappeared mid-run, update skipped')
+        continue
+      }
+      await send(task.chat_id, result)
     } catch (err) {
       const msg = (err as Error).message ?? String(err)
       logger.error({ err, id: task.id }, 'scheduled task failed')
       try {
-        await send(task.chat_id, `Scheduled task ${task.id} failed: ${msg}`)
+        const nextRun = computeNextRun(task.schedule)
+        const changes = updateTaskAfterRun(
+          task.id,
+          nextRun,
+          `ERROR: ${msg}`,
+          missed,
+          missed > 0 ? now : null,
+        )
+        if (changes === 0) {
+          logger.warn({ id: task.id }, 'task disappeared mid-run, failure update skipped')
+          continue
+        }
       } catch {
         /* ignore */
       }
       try {
-        const nextRun = computeNextRun(task.schedule)
-        updateTaskAfterRun(task.id, nextRun, `ERROR: ${msg}`, 0, null)
+        await send(task.chat_id, `Scheduled task ${task.id} failed: ${msg}`)
       } catch {
         /* ignore */
       }
