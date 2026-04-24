@@ -10,13 +10,16 @@ describe('nonOverlapping', () => {
   it('skips new calls while previous is still running', async () => {
     let started = 0
     let resolve: (() => void) | undefined
-    const slow = () => new Promise<void>((r) => {
-      started++
-      resolve = r
-    })
+    const slow = () =>
+      new Promise<void>((r) => {
+        started++
+        resolve = r
+      })
 
     let skipped = 0
-    const tick = nonOverlapping(slow, () => { skipped++ })
+    const tick = nonOverlapping(slow, () => {
+      skipped++
+    })
 
     tick()
     tick()

@@ -38,7 +38,10 @@ function buildKeyboard(active: EffortLevel | null): InlineKeyboard {
     kb.text(label, `${CALLBACK_PREFIX}${level}`).row()
   }
   const defaultLabel = `Use bot default (${effortLabel(CHAT_DEFAULT_EFFORT)})`
-  kb.text(active === null ? `✓ ${defaultLabel}` : defaultLabel, `${CALLBACK_PREFIX}${DEFAULT_CHOICE}`)
+  kb.text(
+    active === null ? `✓ ${defaultLabel}` : defaultLabel,
+    `${CALLBACK_PREFIX}${DEFAULT_CHOICE}`,
+  )
   return kb
 }
 
@@ -72,7 +75,10 @@ export function registerEffort(bot: Bot): void {
   bot.on('callback_query:data', async (ctx, next) => {
     const parsed = parseEffortCallback(ctx.callbackQuery.data)
     if (!parsed) {
-      if (typeof ctx.callbackQuery.data === 'string' && ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)) {
+      if (
+        typeof ctx.callbackQuery.data === 'string' &&
+        ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)
+      ) {
         await ctx.answerCallbackQuery({ text: 'Unknown level', show_alert: true })
         return
       }

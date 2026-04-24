@@ -11,7 +11,6 @@ export const WORKSPACE_DIR = path.join(PROJECT_ROOT, 'workspace')
 export const UPLOADS_DIR = path.join(WORKSPACE_DIR, 'uploads')
 export const DB_PATH = path.join(STORE_DIR, 'claudeclaw.db')
 export const PID_FILE = path.join(STORE_DIR, 'claudeclaw.pid')
-export const CLAUDE_MD_PATH = path.join(PROJECT_ROOT, 'CLAUDE.md')
 
 export const MAX_MESSAGE_LENGTH = 4096
 export const TYPING_REFRESH_MS = 4000
@@ -26,10 +25,7 @@ export const GROQ_API_KEY = env['GROQ_API_KEY'] ?? ''
 export const ELEVENLABS_API_KEY = env['ELEVENLABS_API_KEY'] ?? ''
 export const ELEVENLABS_VOICE_ID = env['ELEVENLABS_VOICE_ID'] ?? ''
 export const ELEVENLABS_MODEL_ID = env['ELEVENLABS_MODEL_ID'] ?? 'eleven_multilingual_v2'
-export const TTS_MAX_CHARS = Math.max(
-  50,
-  Number(env['TTS_MAX_CHARS'] ?? '800') || 800,
-)
+export const TTS_MAX_CHARS = Math.max(50, Number(env['TTS_MAX_CHARS'] ?? '800') || 800)
 
 const rawAllowed = env['ALLOWED_CHAT_IDS'] ?? env['ALLOWED_CHAT_ID'] ?? ''
 export const ALLOWED_CHAT_IDS: readonly string[] = rawAllowed
@@ -38,12 +34,15 @@ export const ALLOWED_CHAT_IDS: readonly string[] = rawAllowed
   .filter(Boolean)
 
 const rawAdmin = env['ADMIN_CHAT_IDS'] ?? ''
-export const ADMIN_CHAT_IDS: readonly string[] = (rawAdmin
+export const ADMIN_CHAT_IDS: readonly string[] = rawAdmin
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean).length
-  ? rawAdmin.split(',').map((s) => s.trim()).filter(Boolean)
-  : ALLOWED_CHAT_IDS.slice(0, 1))
+  ? rawAdmin
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : ALLOWED_CHAT_IDS.slice(0, 1)
 
 export function isAdminOf(admins: readonly string[], chatId: number | string): boolean {
   if (admins.length === 0) return false
@@ -72,14 +71,29 @@ export const EFFORT_TOKENS_MEDIUM = readPositiveInt('EFFORT_TOKENS_MEDIUM', 8_19
 export const EFFORT_TOKENS_HIGH = readPositiveInt('EFFORT_TOKENS_HIGH', 24_576)
 export const EFFORT_TOKENS_XHIGH = readPositiveInt('EFFORT_TOKENS_XHIGH', 65_536)
 
+// Retry budget for the Claude Agent SDK call. Retries only fire for transient
+// errors (429, 5xx, 529, network resets) and only while the stream has not
+// started yet — once the SDK has emitted any event, a tool call may already
+// have run, so retrying would be non-idempotent.
+export const AGENT_RETRY_ATTEMPTS = readPositiveInt('AGENT_RETRY_ATTEMPTS', 3)
+export const AGENT_RETRY_BASE_MS = readPositiveInt('AGENT_RETRY_BASE_MS', 500)
+
+// Hard guards on a single SDK query. maxTurns caps tool-use loops so a
+// confused agent can't burn through tokens in bypassPermissions mode.
+// STREAM_TIMEOUT_MS aborts a query that connected but never produces any
+// event within the window — prevents the worker from hanging forever.
+export const AGENT_MAX_TURNS = readPositiveInt('AGENT_MAX_TURNS', 25)
+export const AGENT_STREAM_TIMEOUT_MS = readPositiveInt('AGENT_STREAM_TIMEOUT_MS', 120_000)
+
 // Per-chat rate limit (token bucket). Defaults: 10-message burst, then
 // one message every 6 seconds sustained (10/min). Set capacity=0 to
 // disable entirely.
-export const RATE_LIMIT_CAPACITY = Math.max(
-  0,
-  Number(env['RATE_LIMIT_CAPACITY'] ?? '10') || 10,
-)
+export const RATE_LIMIT_CAPACITY = Math.max(0, Number(env['RATE_LIMIT_CAPACITY'] ?? '10') || 10)
 export const RATE_LIMIT_REFILL_PER_MIN = readPositiveInt('RATE_LIMIT_REFILL_PER_MIN', 10)
+// Hard ceiling on how many chat_id buckets we track in memory. Protects
+// long-running processes from unbounded Map growth when the chat-id space
+// is high-cardinality (public bots, scrapers). LRU evicts the oldest.
+export const RATE_LIMIT_MAX_TRACKED = readPositiveInt('RATE_LIMIT_MAX_TRACKED', 10_000)
 
 // Hard cap on how many episodic memories we keep per chat. Prevents the
 // DB from growing linearly for the lifetime of the agent. Semantic
@@ -89,6 +103,26 @@ export const MEMORY_EPISODIC_CAP_PER_CHAT = Math.max(
   0,
   Number(env['MEMORY_EPISODIC_CAP_PER_CHAT'] ?? '1000') || 1000,
 )
+
+// Guard rails for the episodic cap. Rows at or above this salience are
+// never evicted (identity facts the user touches a lot). Rows younger
+// than this many hours are also spared — a long-idle chat that suddenly
+// receives a new message should not immediately lose the new fact just
+// because the older rows happen to have a newer accessed_at.
+export const MEMORY_PROTECT_MIN_SALIENCE =
+  Number(env['MEMORY_PROTECT_MIN_SALIENCE'] ?? '2.0') || 2.0
+export const MEMORY_PROTECT_MIN_AGE_HOURS = readPositiveInt('MEMORY_PROTECT_MIN_AGE_HOURS', 168)
+// How many rows to delete per pass in the daily episodic cap sweep. The
+// sweep awaits setImmediate between passes so incoming messages aren't
+// starved on a multi-thousand-row delete.
+export const MEMORY_CAP_BATCH_SIZE = readPositiveInt('MEMORY_CAP_BATCH_SIZE', 500)
+
+// Localhost-only health probe. Use for systemd Watchdog, uptime-kuma, or
+// any external liveness monitor. HEALTH_HOST defaults to 127.0.0.1; binding
+// to 0.0.0.0 is an explicit opt-in.
+export const HEALTH_ENABLED = (env['HEALTH_ENABLED'] ?? '1').trim() !== '0'
+export const HEALTH_HOST = (env['HEALTH_HOST'] ?? '127.0.0.1').trim()
+export const HEALTH_PORT = Number(env['HEALTH_PORT'] ?? '9090') || 9090
 
 // Episodic-to-semantic consolidation. Off by default: it costs tokens on
 // every tick. When on, once per interval we collect a chat's oldest
@@ -100,10 +134,7 @@ export const MEMORY_SUMMARIZE_INTERVAL_HOURS = readPositiveInt(
   'MEMORY_SUMMARIZE_INTERVAL_HOURS',
   168,
 )
-export const MEMORY_SUMMARIZE_MIN_AGE_DAYS = readPositiveInt(
-  'MEMORY_SUMMARIZE_MIN_AGE_DAYS',
-  7,
-)
+export const MEMORY_SUMMARIZE_MIN_AGE_DAYS = readPositiveInt('MEMORY_SUMMARIZE_MIN_AGE_DAYS', 7)
 export const MEMORY_SUMMARIZE_BATCH = readPositiveInt('MEMORY_SUMMARIZE_BATCH', 50)
 export const MEMORY_SUMMARIZE_MIN_BATCH = readPositiveInt('MEMORY_SUMMARIZE_MIN_BATCH', 10)
 
@@ -119,10 +150,7 @@ export const PREVIEW_PASSWORD = (env['PREVIEW_PASSWORD'] ?? '').trim()
 
 const LOCALHOST_BINDS = new Set(['127.0.0.1', '::1', 'localhost'])
 
-export function resolvePreviewBind(
-  host: string,
-  password: string,
-): { host: string } {
+export function resolvePreviewBind(host: string, password: string): { host: string } {
   const requested = host.trim()
   const effective = requested || '127.0.0.1'
   if (!password && !LOCALHOST_BINDS.has(effective)) {
@@ -178,8 +206,11 @@ export const WHATSAPP_META_ACCESS_TOKEN = env['WHATSAPP_META_ACCESS_TOKEN'] ?? '
 export const WHATSAPP_META_PHONE_NUMBER_ID = env['WHATSAPP_META_PHONE_NUMBER_ID'] ?? ''
 export const WHATSAPP_META_VERIFY_TOKEN = env['WHATSAPP_META_VERIFY_TOKEN'] ?? ''
 export const WHATSAPP_META_APP_SECRET = env['WHATSAPP_META_APP_SECRET'] ?? ''
-export const WHATSAPP_META_WEBHOOK_PORT = Number(env['WHATSAPP_META_WEBHOOK_PORT'] ?? '3001') || 3001
-export const WHATSAPP_META_WEBHOOK_PATH = (env['WHATSAPP_META_WEBHOOK_PATH'] ?? '/whatsapp/webhook').trim()
+export const WHATSAPP_META_WEBHOOK_PORT =
+  Number(env['WHATSAPP_META_WEBHOOK_PORT'] ?? '3001') || 3001
+export const WHATSAPP_META_WEBHOOK_PATH = (
+  env['WHATSAPP_META_WEBHOOK_PATH'] ?? '/whatsapp/webhook'
+).trim()
 export const WHATSAPP_META_GRAPH_VERSION = (env['WHATSAPP_META_GRAPH_VERSION'] ?? 'v20.0').trim()
 
 const rawWhatsapp = env['ALLOWED_WHATSAPP_NUMBERS'] ?? ''

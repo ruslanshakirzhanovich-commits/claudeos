@@ -5,7 +5,9 @@ import { PROJECT_ROOT } from './config.js'
 
 function readPackageVersion(): string {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8')) as { version?: string }
+    const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8')) as {
+      version?: string
+    }
     return pkg.version ?? 'unknown'
   } catch {
     return 'unknown'

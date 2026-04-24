@@ -41,7 +41,11 @@ beforeEach(() => {
 
 afterAll(() => {
   closeDb()
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
 })
 
 function seed(): void {

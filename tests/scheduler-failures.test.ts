@@ -62,7 +62,9 @@ describe('runDueTasks', () => {
     mockTasks.push(makeTask('t1'))
     runAgentSpy.mockRejectedValue(new Error('agent down'))
     const sends: Array<[string, string]> = []
-    const send = async (chatId: string, text: string) => { sends.push([chatId, text]) }
+    const send = async (chatId: string, text: string) => {
+      sends.push([chatId, text])
+    }
 
     await runDueTasks(send)
 
@@ -77,7 +79,9 @@ describe('runDueTasks', () => {
     mockTasks.push(makeTask('t2'))
     runAgentSpy.mockResolvedValue({ text: 'here is the thing' })
     const sends: Array<[string, string]> = []
-    const send = async (chatId: string, text: string) => { sends.push([chatId, text]) }
+    const send = async (chatId: string, text: string) => {
+      sends.push([chatId, text])
+    }
 
     await runDueTasks(send)
 

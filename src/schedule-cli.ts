@@ -1,10 +1,4 @@
-import {
-  initDatabase,
-  listTasks,
-  getTask,
-  deleteTask,
-  setTaskStatus,
-} from './db.js'
+import { initDatabase, listTasks, getTask, deleteTask, setTaskStatus } from './db.js'
 import { createScheduledTask, validateCron, computeNextRun } from './scheduler.js'
 
 function printUsage(): void {

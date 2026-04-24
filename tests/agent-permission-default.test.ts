@@ -12,8 +12,8 @@ describe('runAgent permissionMode gate', () => {
   })
 
   it('refuses an explicit falsy permissionMode', async () => {
-    await expect(
-      runAgent('hello', { permissionMode: undefined as never }),
-    ).rejects.toThrow(/permissionMode is required/)
+    await expect(runAgent('hello', { permissionMode: undefined as never })).rejects.toThrow(
+      /permissionMode is required/,
+    )
   })
 })

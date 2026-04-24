@@ -49,9 +49,7 @@ const DEFAULT_CHOICE = MODEL_DEFAULT_CHOICE
  * choice is one we know about. Returns null otherwise. Hardens against
  * forged callback payloads writing arbitrary strings into preferred_model.
  */
-export function parseModelCallback(
-  data: string | undefined | null,
-): { choice: string } | null {
+export function parseModelCallback(data: string | undefined | null): { choice: string } | null {
   if (typeof data !== 'string' || !data.startsWith(CALLBACK_PREFIX)) return null
   const choice = data.slice(CALLBACK_PREFIX.length)
   if (choice === DEFAULT_CHOICE) return { choice }
@@ -103,7 +101,10 @@ export function registerModels(bot: Bot): void {
   bot.on('callback_query:data', async (ctx, next) => {
     const parsed = parseModelCallback(ctx.callbackQuery.data)
     if (!parsed) {
-      if (typeof ctx.callbackQuery.data === 'string' && ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)) {
+      if (
+        typeof ctx.callbackQuery.data === 'string' &&
+        ctx.callbackQuery.data.startsWith(CALLBACK_PREFIX)
+      ) {
         await ctx.answerCallbackQuery({ text: 'Unknown model', show_alert: true })
         return
       }

@@ -1,0 +1,8 @@
+node_modules
+dist
+store
+workspace
+openclaw-main
+openclaw-main.zip
+package-lock.json
+*.md

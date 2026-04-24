@@ -8,7 +8,10 @@ import { verifyBackup } from '../src/db.js'
 const scratch: string[] = []
 
 function makeTempDb(): string {
-  const file = path.join(os.tmpdir(), `cc-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
+  const file = path.join(
+    os.tmpdir(),
+    `cc-backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+  )
   scratch.push(file)
   const db = new BetterSqlite3(file)
   db.pragma('foreign_keys = ON')
@@ -28,7 +31,13 @@ function makeTempDb(): string {
 afterEach(() => {
   while (scratch.length) {
     const f = scratch.pop()
-    if (f && fs.existsSync(f)) { try { fs.unlinkSync(f) } catch { /* ignore */ } }
+    if (f && fs.existsSync(f)) {
+      try {
+        fs.unlinkSync(f)
+      } catch {
+        /* ignore */
+      }
+    }
   }
 })
 

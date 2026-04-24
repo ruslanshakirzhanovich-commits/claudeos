@@ -31,8 +31,9 @@ export function isTransientError(err: unknown): boolean {
   const errorCode = (err as { error_code?: unknown }).error_code
   if (typeof errorCode === 'number' && (errorCode >= 500 || errorCode === 429)) return true
 
-  const status = (err as { status?: unknown; statusCode?: unknown }).status
-    ?? (err as { statusCode?: unknown }).statusCode
+  const status =
+    (err as { status?: unknown; statusCode?: unknown }).status ??
+    (err as { statusCode?: unknown }).statusCode
   if (typeof status === 'number' && (status >= 500 || status === 429)) return true
 
   const msg = (err as Error)?.message
@@ -41,10 +42,7 @@ export function isTransientError(err: unknown): boolean {
   return false
 }
 
-export async function withRetry<T>(
-  fn: () => Promise<T>,
-  opts: RetryOptions = {},
-): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
   const attempts = Math.max(1, opts.attempts ?? 3)
   const baseMs = opts.baseMs ?? 500
   const maxMs = opts.maxMs ?? 8000
@@ -59,7 +57,10 @@ export async function withRetry<T>(
       lastErr = err
       if (i === attempts - 1 || !shouldRetry(err)) throw err
       const delay = Math.min(maxMs, baseMs * 2 ** i)
-      log.warn({ err, attempt: i + 1, of: attempts, delayMs: delay, label: opts.label }, 'retrying after transient failure')
+      log.warn(
+        { err, attempt: i + 1, of: attempts, delayMs: delay, label: opts.label },
+        'retrying after transient failure',
+      )
       await new Promise((r) => setTimeout(r, delay))
     }
   }

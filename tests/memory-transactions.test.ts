@@ -9,7 +9,9 @@ describe('better-sqlite3 transaction semantics (pattern used by db.ts)', () => {
     const file = path.join(os.tmpdir(), `cc-tx-test-${Date.now()}.db`)
     const db = new BetterSqlite3(file)
     try {
-      db.exec(`CREATE TABLE memories (id INTEGER PRIMARY KEY, chat_id TEXT NOT NULL, content TEXT NOT NULL)`)
+      db.exec(
+        `CREATE TABLE memories (id INTEGER PRIMARY KEY, chat_id TEXT NOT NULL, content TEXT NOT NULL)`,
+      )
       const ins = db.prepare(`INSERT INTO memories (chat_id, content) VALUES (?, ?)`)
       const tx = db.transaction((rows: Array<{ chatId: string | null; content: string }>) => {
         for (const r of rows) ins.run(r.chatId, r.content)
@@ -34,7 +36,9 @@ describe('better-sqlite3 transaction semantics (pattern used by db.ts)', () => {
     const file = path.join(os.tmpdir(), `cc-tx-test-ok-${Date.now()}.db`)
     const db = new BetterSqlite3(file)
     try {
-      db.exec(`CREATE TABLE memories (id INTEGER PRIMARY KEY, chat_id TEXT NOT NULL, content TEXT NOT NULL)`)
+      db.exec(
+        `CREATE TABLE memories (id INTEGER PRIMARY KEY, chat_id TEXT NOT NULL, content TEXT NOT NULL)`,
+      )
       const ins = db.prepare(`INSERT INTO memories (chat_id, content) VALUES (?, ?)`)
       const tx = db.transaction((rows: Array<{ chatId: string; content: string }>) => {
         for (const r of rows) ins.run(r.chatId, r.content)

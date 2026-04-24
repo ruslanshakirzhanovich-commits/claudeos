@@ -18,10 +18,7 @@ export function formatForTelegram(text: string): string {
     return `IC${idx}`
   })
 
-  work = work
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  work = work.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   work = work
     .replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>')
@@ -37,11 +34,13 @@ export function formatForTelegram(text: string): string {
     .replace(/^-{3,}$/gm, '')
     .replace(/^\*{3,}$/gm, '')
 
+  // eslint-disable-next-line no-control-regex
   work = work.replace(/IC(\d+)/g, (_m, idx) => {
     const code = inlineCodes[Number(idx)] ?? ''
     const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     return `<code>${escaped}</code>`
   })
+  // eslint-disable-next-line no-control-regex
   work = work.replace(/CB(\d+)/g, (_m, idx) => {
     const code = codeBlocks[Number(idx)] ?? ''
     const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

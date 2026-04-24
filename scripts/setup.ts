@@ -73,12 +73,17 @@ function notEmpty(label: string) {
   return (s: string) => {
     const t = s.trim()
     if (!t) return `${label} can't be empty.`
-    if (t === 'undefined' || t === 'null') return `${label} looks like a literal "${t}" — paste the real value.`
+    if (t === 'undefined' || t === 'null')
+      return `${label} looks like a literal "${t}" — paste the real value.`
     return undefined
   }
 }
 
-async function httpGet(hostname: string, pathname: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+async function httpGet(
+  hostname: string,
+  pathname: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     https
       .get({ hostname, path: pathname, headers }, (res) => {
@@ -95,7 +100,11 @@ async function httpGet(hostname: string, pathname: string, headers: Record<strin
 async function verifyTelegramToken(token: string): Promise<string> {
   const { status, body } = await httpGet('api.telegram.org', `/bot${token}/getMe`)
   if (status !== 200) throw new Error(`Telegram API ${status}: ${body.slice(0, 200)}`)
-  const parsed = JSON.parse(body) as { ok: boolean; result?: { username?: string }; description?: string }
+  const parsed = JSON.parse(body) as {
+    ok: boolean
+    result?: { username?: string }
+    description?: string
+  }
   if (!parsed.ok) throw new Error(parsed.description ?? 'Telegram rejected the token')
   return parsed.result?.username ?? 'unknown'
 }
@@ -119,16 +128,19 @@ async function checkRequirements(): Promise<void> {
 
   let claudeLine = 'not found'
   try {
-    claudeLine = execSync('claude --version', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim() || 'present'
+    claudeLine =
+      execSync('claude --version', { stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString()
+        .trim() || 'present'
   } catch {
     /* optional */
   }
 
   s.stop(`Node ${process.versions.node} · Claude CLI: ${claudeLine}`)
   if (claudeLine === 'not found') {
-    log.warn('`claude` not on PATH. Install from https://claude.com/code and run `claude login` before starting the bot.')
+    log.warn(
+      '`claude` not on PATH. Install from https://claude.com/code and run `claude login` before starting the bot.',
+    )
   }
 }
 
@@ -158,7 +170,8 @@ async function sectionTelegram(existing: EnvMap): Promise<string> {
         mask: '•',
         validate: (s) => {
           if (!s.trim()) return 'Required.'
-          if (!TELEGRAM_TOKEN_RE.test(s.trim())) return 'Does not look like a bot token (expected `<digits>:<chars>`).'
+          if (!TELEGRAM_TOKEN_RE.test(s.trim()))
+            return 'Does not look like a bot token (expected `<digits>:<chars>`).'
           return undefined
         },
       }),
@@ -199,7 +212,10 @@ async function sectionAuthorization(existing: EnvMap): Promise<string> {
       validate: (s) => {
         const trimmed = s.trim()
         if (!trimmed) return undefined
-        const ids = trimmed.split(',').map((x) => x.trim()).filter(Boolean)
+        const ids = trimmed
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
         for (const id of ids) {
           if (!CHAT_ID_RE.test(id)) return `"${id}" is not a numeric chat ID.`
         }
@@ -330,7 +346,12 @@ async function sectionTTS(existing: EnvMap): Promise<TtsConfig | null> {
     }),
   )
 
-  return { apiKey, voiceId: voiceId.trim(), modelId: modelId as string, maxChars: maxCharsRaw.trim() }
+  return {
+    apiKey,
+    voiceId: voiceId.trim(),
+    modelId: modelId as string,
+    maxChars: maxCharsRaw.trim(),
+  }
 }
 
 interface WhatsAppConfig {
@@ -364,7 +385,10 @@ async function sectionWhatsApp(existing: EnvMap): Promise<WhatsAppConfig> {
       validate: (s) => {
         const t = s.trim()
         if (!t) return undefined
-        for (const n of t.split(',').map((x) => x.trim()).filter(Boolean)) {
+        for (const n of t
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)) {
           if (!/^\d+$/.test(n)) return `"${n}" is not digits-only.`
         }
         return undefined
@@ -420,7 +444,9 @@ async function main(): Promise<void> {
   await checkRequirements()
   const existing = readEnv()
   if (Object.keys(existing).length) {
-    log.info(`Found existing .env with ${Object.keys(existing).length} keys — values below are pre-filled.`)
+    log.info(
+      `Found existing .env with ${Object.keys(existing).length} keys — values below are pre-filled.`,
+    )
   }
 
   const token = await sectionTelegram(existing)

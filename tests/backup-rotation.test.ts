@@ -48,10 +48,7 @@ describe('rotateBackups', () => {
     expect(removed).toBe(2)
 
     const left = fs.readdirSync(dir).sort()
-    expect(left).toEqual([
-      'claudeclaw-2026-04-22T00-00-00.db',
-      'claudeclaw-2026-04-23T00-00-00.db',
-    ])
+    expect(left).toEqual(['claudeclaw-2026-04-22T00-00-00.db', 'claudeclaw-2026-04-23T00-00-00.db'])
   })
 
   it('ignores non-backup files in the dir', () => {
@@ -59,15 +56,15 @@ describe('rotateBackups', () => {
     touch('readme.txt', Date.now())
     const removed = rotateBackups(1)
     expect(removed).toBe(0)
-    expect(fs.readdirSync(dir).sort()).toEqual([
-      'claudeclaw-2026-04-23T00-00-00.db',
-      'readme.txt',
-    ])
+    expect(fs.readdirSync(dir).sort()).toEqual(['claudeclaw-2026-04-23T00-00-00.db', 'readme.txt'])
   })
 
   it('keep=N preserves exactly N files even with many backups', () => {
     for (let i = 0; i < 10; i++) {
-      touch(`claudeclaw-2026-04-${String(10 + i).padStart(2, '0')}T00-00-00.db`, Date.now() - (9 - i) * 86400_000)
+      touch(
+        `claudeclaw-2026-04-${String(10 + i).padStart(2, '0')}T00-00-00.db`,
+        Date.now() - (9 - i) * 86400_000,
+      )
     }
     const removed = rotateBackups(3)
     expect(removed).toBe(7)

@@ -28,7 +28,11 @@ initDatabase()
 
 afterAll(() => {
   closeDb()
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
 })
 
 describe('isValidTelegramChatId', () => {
@@ -49,7 +53,9 @@ describe('isValidTelegramChatId', () => {
 
 describe('addAllowedChat input validation', () => {
   it('throws when given a WhatsApp jid', () => {
-    expect(() => addAllowedChat('15551234567@s.whatsapp.net', 'admin', null)).toThrow(/not a Telegram chat id/)
+    expect(() => addAllowedChat('15551234567@s.whatsapp.net', 'admin', null)).toThrow(
+      /not a Telegram chat id/,
+    )
     expect(isChatAllowed('15551234567@s.whatsapp.net')).toBe(false)
   })
 

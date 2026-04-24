@@ -58,9 +58,7 @@ function seedEpisodic(chatId: string, count: number, ageDays: number): void {
   // insertMemories stamps created_at to now. Push the seeded rows back
   // in time so they qualify as "stale" for the summarize cutoff.
   getDb()
-    .prepare(
-      `UPDATE memories SET created_at = ? WHERE chat_id = ? AND sector = 'episodic'`,
-    )
+    .prepare(`UPDATE memories SET created_at = ? WHERE chat_id = ? AND sector = 'episodic'`)
     .run(createdAt, chatId)
 }
 
@@ -88,7 +86,7 @@ describe('listChatsWithStaleEpisodic', () => {
 describe('replaceEpisodicWithSummary', () => {
   it('atomically swaps N episodic rows for one semantic summary', () => {
     seedEpisodic('chat-a', 5, 30)
-    const ids = (getStaleEpisodicForChat('chat-a', Date.now(), 100)).map((r) => r.id)
+    const ids = getStaleEpisodicForChat('chat-a', Date.now(), 100).map((r) => r.id)
     const res = replaceEpisodicWithSummary('chat-a', ids, 'user prefers concise answers')
     expect(res.inserted).toBe(1)
     expect(res.deleted).toBe(5)
@@ -108,7 +106,7 @@ describe('replaceEpisodicWithSummary', () => {
 
   it('is a no-op for blank summary (never wipe sources without a replacement)', () => {
     seedEpisodic('chat-a', 3, 30)
-    const ids = (getStaleEpisodicForChat('chat-a', Date.now(), 100)).map((r) => r.id)
+    const ids = getStaleEpisodicForChat('chat-a', Date.now(), 100).map((r) => r.id)
     const res = replaceEpisodicWithSummary('chat-a', ids, '   ')
     expect(res).toEqual({ inserted: 0, deleted: 0 })
     expect(countMemories('chat-a')).toBe(3)
@@ -127,10 +125,7 @@ describe('runMemorySummarizeSweep', () => {
       return 'user is active'
     })
 
-    const res = await runMemorySummarizeSweep(
-      { minAgeDays: 7, batch: 50, minBatch: 10 },
-      summarize,
-    )
+    const res = await runMemorySummarizeSweep({ minAgeDays: 7, batch: 50, minBatch: 10 }, summarize)
 
     expect(res.chatsProcessed).toBe(2)
     expect(res.chatsConsolidated).toBe(2)
@@ -146,10 +141,7 @@ describe('runMemorySummarizeSweep', () => {
   it('skips the swap when summarize returns empty', async () => {
     seedEpisodic('chat-a', 12, 30)
     const summarize = vi.fn(async () => '')
-    const res = await runMemorySummarizeSweep(
-      { minAgeDays: 7, batch: 50, minBatch: 10 },
-      summarize,
-    )
+    const res = await runMemorySummarizeSweep({ minAgeDays: 7, batch: 50, minBatch: 10 }, summarize)
     expect(res.chatsConsolidated).toBe(0)
     expect(res.episodicConsolidated).toBe(0)
     expect(countMemories('chat-a')).toBe(12) // still intact
@@ -165,10 +157,7 @@ describe('runMemorySummarizeSweep', () => {
       })
       .mockImplementationOnce(async () => 'ok summary')
 
-    const res = await runMemorySummarizeSweep(
-      { minAgeDays: 7, batch: 50, minBatch: 10 },
-      summarize,
-    )
+    const res = await runMemorySummarizeSweep({ minAgeDays: 7, batch: 50, minBatch: 10 }, summarize)
 
     expect(res.errors).toBe(1)
     expect(res.chatsConsolidated).toBe(1)
@@ -180,10 +169,7 @@ describe('runMemorySummarizeSweep', () => {
   it('does nothing when there is no stale episodic to consolidate', async () => {
     seedEpisodic('chat-a', 2, 1) // too new, below minBatch
     const summarize = vi.fn(async () => 'nope')
-    const res = await runMemorySummarizeSweep(
-      { minAgeDays: 7, batch: 50, minBatch: 10 },
-      summarize,
-    )
+    const res = await runMemorySummarizeSweep({ minAgeDays: 7, batch: 50, minBatch: 10 }, summarize)
     expect(res).toEqual({
       chatsProcessed: 0,
       chatsConsolidated: 0,

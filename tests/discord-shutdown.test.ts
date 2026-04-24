@@ -13,8 +13,12 @@ class MockDiscordClient {
   constructor(_opts: unknown) {
     MockDiscordClient.instances.push(this)
   }
-  on() { return this }
-  once() { return this }
+  on() {
+    return this
+  }
+  once() {
+    return this
+  }
   login(): Promise<void> {
     return new Promise<void>((resolve) => {
       resolveLogin = resolve

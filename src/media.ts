@@ -36,7 +36,12 @@ async function downloadBinary(url: string, dest: string): Promise<void> {
     const file = fs.createWriteStream(dest)
     https
       .get(url, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
           file.close()
           fs.unlinkSync(dest)
           downloadBinary(res.headers.location, dest).then(resolve, reject)
@@ -76,16 +81,16 @@ export async function downloadMedia(
 }
 
 export function buildPhotoMessage(localPath: string, caption?: string): string {
-  const captionBlock = caption
-    ? wrapUntrusted(caption, 'photo_caption') + '\n\n'
-    : ''
+  const captionBlock = caption ? wrapUntrusted(caption, 'photo_caption') + '\n\n' : ''
   return `${captionBlock}[User sent a photo. Local path: ${localPath}. Read it with your vision tools or analyze as needed.]`
 }
 
-export function buildDocumentMessage(localPath: string, filename: string, caption?: string): string {
-  const captionBlock = caption
-    ? wrapUntrusted(caption, 'document_caption') + '\n\n'
-    : ''
+export function buildDocumentMessage(
+  localPath: string,
+  filename: string,
+  caption?: string,
+): string {
+  const captionBlock = caption ? wrapUntrusted(caption, 'document_caption') + '\n\n' : ''
   const safeFilename = wrapUntrusted(filename, 'document_filename')
   return `${captionBlock}[User sent a document. Local path: ${localPath}. Original filename (untrusted):\n${safeFilename}\nRead it with your file tools.]`
 }

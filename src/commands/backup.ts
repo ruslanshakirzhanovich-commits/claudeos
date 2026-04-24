@@ -26,17 +26,24 @@ export function registerBackup(bot: Bot): void {
       const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2)
       const verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
       const rotatedLine = removed > 0 ? ` · pruned ${removed} old` : ''
-      await ctx.reply(`Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}${rotatedLine}`, { parse_mode: 'HTML' })
+      await ctx.reply(
+        `Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}${rotatedLine}`,
+        { parse_mode: 'HTML' },
+      )
 
       if (sizeBytes <= TELEGRAM_FILE_LIMIT) {
         try {
           await ctx.replyWithDocument(new InputFile(destPath))
         } catch (err) {
           logger.warn({ err }, 'backup upload to Telegram failed')
-          await ctx.reply('(Backup saved locally but upload to Telegram failed — file is on the server.)')
+          await ctx.reply(
+            '(Backup saved locally but upload to Telegram failed — file is on the server.)',
+          )
         }
       } else {
-        await ctx.reply(`(File >${TELEGRAM_FILE_LIMIT / 1024 / 1024}MB — not uploading to Telegram. Grab from server.)`)
+        await ctx.reply(
+          `(File >${TELEGRAM_FILE_LIMIT / 1024 / 1024}MB — not uploading to Telegram. Grab from server.)`,
+        )
       }
     } catch (err) {
       logger.error({ err }, 'backup failed')

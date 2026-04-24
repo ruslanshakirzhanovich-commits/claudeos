@@ -13,12 +13,21 @@ const DEPLOY_LOG = '/tmp/claudeclaw-deploy.log'
 async function gitFetch(): Promise<{ ahead: number; remote: string; local: string }> {
   await execFileAsync('git', ['-C', PROJECT_ROOT, 'fetch', 'origin', 'main'])
   const { stdout: local } = await execFileAsync('git', ['-C', PROJECT_ROOT, 'rev-parse', 'HEAD'])
-  const { stdout: remote } = await execFileAsync('git', ['-C', PROJECT_ROOT, 'rev-parse', 'origin/main'])
+  const { stdout: remote } = await execFileAsync('git', [
+    '-C',
+    PROJECT_ROOT,
+    'rev-parse',
+    'origin/main',
+  ])
   if (local.trim() === remote.trim()) {
     return { ahead: 0, remote: remote.trim(), local: local.trim() }
   }
   const { stdout: count } = await execFileAsync('git', [
-    '-C', PROJECT_ROOT, 'rev-list', '--count', 'HEAD..origin/main',
+    '-C',
+    PROJECT_ROOT,
+    'rev-list',
+    '--count',
+    'HEAD..origin/main',
   ])
   return { ahead: Number(count.trim()) || 0, remote: remote.trim(), local: local.trim() }
 }
@@ -26,7 +35,13 @@ async function gitFetch(): Promise<{ ahead: number; remote: string; local: strin
 async function gitLogPreview(): Promise<string> {
   try {
     const { stdout } = await execFileAsync('git', [
-      '-C', PROJECT_ROOT, 'log', '--oneline', '--no-decorate', '-10', 'HEAD..origin/main',
+      '-C',
+      PROJECT_ROOT,
+      'log',
+      '--oneline',
+      '--no-decorate',
+      '-10',
+      'HEAD..origin/main',
     ])
     return stdout.trim()
   } catch {
@@ -55,7 +70,9 @@ export function registerUpdate(bot: Bot): void {
     }
 
     if (info.ahead === 0) {
-      await ctx.reply(`Already up to date at <code>${info.local.slice(0, 8)}</code>.`, { parse_mode: 'HTML' })
+      await ctx.reply(`Already up to date at <code>${info.local.slice(0, 8)}</code>.`, {
+        parse_mode: 'HTML',
+      })
       return
     }
 

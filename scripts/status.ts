@@ -8,7 +8,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const PROJECT_ROOT = path.resolve(__dirname, '..')
 
-const C = { reset: '\x1b[0m', green: '\x1b[32m', yellow: '\x1b[33m', red: '\x1b[31m', dim: '\x1b[2m' }
+const C = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  dim: '\x1b[2m',
+}
 const ok = (s: string) => process.stdout.write(`${C.green}✓${C.reset} ${s}\n`)
 const warn = (s: string) => process.stdout.write(`${C.yellow}⚠${C.reset} ${s}\n`)
 const bad = (s: string) => process.stdout.write(`${C.red}✗${C.reset} ${s}\n`)
@@ -24,7 +30,8 @@ function readEnv(): Record<string, string> {
     const eq = t.indexOf('=')
     if (eq < 0) continue
     let v = t.slice(eq + 1).trim()
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+      v = v.slice(1, -1)
     out[t.slice(0, eq).trim()] = v
   }
   return out
@@ -92,8 +99,11 @@ async function main(): Promise<void> {
     try {
       const Database: any = (await import('better-sqlite3')).default
       const db = new Database(dbPath, { readonly: true })
-      const memoryCount = (db.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
-      const taskCount = (db.prepare('SELECT COUNT(*) AS c FROM scheduled_tasks').get() as { c: number }).c
+      const memoryCount = (db.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number })
+        .c
+      const taskCount = (
+        db.prepare('SELECT COUNT(*) AS c FROM scheduled_tasks').get() as { c: number }
+      ).c
       ok(`Memories: ${memoryCount}`)
       ok(`Scheduled tasks: ${taskCount}`)
       db.close()
@@ -105,11 +115,15 @@ async function main(): Promise<void> {
   }
 
   if (process.platform === 'darwin') {
-    const res = spawnSync('launchctl', ['list', 'com.claudeclaw.app'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    const res = spawnSync('launchctl', ['list', 'com.claudeclaw.app'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
     if (res.status === 0) ok('launchd service: loaded')
     else warn('launchd service: not loaded')
   } else if (process.platform === 'linux') {
-    const res = spawnSync('systemctl', ['--user', 'is-active', 'claudeclaw.service'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    const res = spawnSync('systemctl', ['--user', 'is-active', 'claudeclaw.service'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
     const state = (res.stdout?.toString() ?? '').trim()
     if (state === 'active') ok('systemd service: active')
     else warn(`systemd service: ${state || 'not installed'}`)

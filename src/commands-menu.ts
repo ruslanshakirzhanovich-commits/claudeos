@@ -44,7 +44,11 @@ export async function publishBotCommands(bot: Bot): Promise<void> {
       }
     }
     logger.info(
-      { base: BASE_COMMANDS.length, adminExtra: ADMIN_COMMANDS.length - BASE_COMMANDS.length, admins: ADMIN_CHAT_IDS.length },
+      {
+        base: BASE_COMMANDS.length,
+        adminExtra: ADMIN_COMMANDS.length - BASE_COMMANDS.length,
+        admins: ADMIN_CHAT_IDS.length,
+      },
       'bot commands published',
     )
   } catch (err) {

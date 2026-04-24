@@ -100,8 +100,7 @@ export async function summarizeViaAgentSdk(text: string): Promise<string> {
   let result = ''
   for await (const event of stream as AsyncIterable<any>) {
     if (event?.type === 'result') {
-      result =
-        typeof event.result === 'string' ? event.result : (event.result?.result ?? '')
+      result = typeof event.result === 'string' ? event.result : (event.result?.result ?? '')
     }
   }
   return result.trim()

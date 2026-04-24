@@ -11,7 +11,12 @@ import {
 } from '../config.js'
 import { logger } from '../logger.js'
 import { withRetry } from '../retry.js'
-import type { WhatsAppClient, WhatsAppMessage, WhatsAppMessageHandler, WhatsAppSendReply } from './types.js'
+import type {
+  WhatsAppClient,
+  WhatsAppMessage,
+  WhatsAppMessageHandler,
+  WhatsAppSendReply,
+} from './types.js'
 
 interface MetaMessageValue {
   messages?: Array<{
@@ -37,11 +42,14 @@ interface MetaPayload {
 
 function verifySignature(body: Buffer, signatureHeader: string | undefined): boolean {
   if (!WHATSAPP_META_APP_SECRET) {
-    logger.warn('WHATSAPP_META_APP_SECRET not set — skipping signature verification (INSECURE in production)')
+    logger.warn(
+      'WHATSAPP_META_APP_SECRET not set — skipping signature verification (INSECURE in production)',
+    )
     return true
   }
   if (!signatureHeader) return false
-  const expected = 'sha256=' + crypto.createHmac('sha256', WHATSAPP_META_APP_SECRET).update(body).digest('hex')
+  const expected =
+    'sha256=' + crypto.createHmac('sha256', WHATSAPP_META_APP_SECRET).update(body).digest('hex')
   try {
     return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))
   } catch {
@@ -71,7 +79,9 @@ function extractMessages(payload: MetaPayload): WhatsAppMessage[] {
 
 async function sendTextMessage(toJid: string, text: string): Promise<void> {
   if (!WHATSAPP_META_ACCESS_TOKEN || !WHATSAPP_META_PHONE_NUMBER_ID) {
-    throw new Error('meta provider: WHATSAPP_META_ACCESS_TOKEN and WHATSAPP_META_PHONE_NUMBER_ID are required')
+    throw new Error(
+      'meta provider: WHATSAPP_META_ACCESS_TOKEN and WHATSAPP_META_PHONE_NUMBER_ID are required',
+    )
   }
   const toNumber = toJid.split('@')[0] ?? ''
   const url = `https://graph.facebook.com/${WHATSAPP_META_GRAPH_VERSION}/${encodeURIComponent(WHATSAPP_META_PHONE_NUMBER_ID)}/messages`
@@ -83,22 +93,25 @@ async function sendTextMessage(toJid: string, text: string): Promise<void> {
     text: { body: text },
   })
 
-  await withRetry(async () => {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_META_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body,
-    })
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      const err = new Error(`Meta send ${res.status}: ${errText.slice(0, 300)}`)
-      ;(err as Error & { status?: number }).status = res.status
-      throw err
-    }
-  }, { label: 'meta-whatsapp-send' })
+  await withRetry(
+    async () => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_META_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+      })
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        const err = new Error(`Meta send ${res.status}: ${errText.slice(0, 300)}`)
+        ;(err as Error & { status?: number }).status = res.status
+        throw err
+      }
+    },
+    { label: 'meta-whatsapp-send' },
+  )
 }
 
 function readBody(req: http.IncomingMessage, limitBytes = 1024 * 1024): Promise<Buffer> {
@@ -123,7 +136,10 @@ export function createMetaClient(): WhatsAppClient {
   let server: http.Server | null = null
   let msgHandler: WhatsAppMessageHandler | null = null
 
-  async function handleWebhookPost(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  async function handleWebhookPost(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
     let body: Buffer
     try {
       body = await readBody(req)
@@ -187,7 +203,10 @@ export function createMetaClient(): WhatsAppClient {
             logger.info('meta: webhook verification succeeded')
             res.writeHead(200, { 'Content-Type': 'text/plain' }).end(challenge)
           } else {
-            logger.warn({ mode, tokenMatch: token === WHATSAPP_META_VERIFY_TOKEN }, 'meta: webhook verification rejected')
+            logger.warn(
+              { mode, tokenMatch: token === WHATSAPP_META_VERIFY_TOKEN },
+              'meta: webhook verification rejected',
+            )
             res.writeHead(403).end('Forbidden')
           }
           return

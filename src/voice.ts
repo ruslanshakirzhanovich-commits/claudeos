@@ -71,9 +71,7 @@ async function fetchElevenLabsMp3(text: string): Promise<Buffer> {
             resolve(buf)
           } else {
             reject(
-              new Error(
-                `ElevenLabs TTS ${res.statusCode}: ${buf.toString('utf8').slice(0, 500)}`,
-              ),
+              new Error(`ElevenLabs TTS ${res.statusCode}: ${buf.toString('utf8').slice(0, 500)}`),
             )
           }
         })
@@ -91,12 +89,18 @@ async function mp3ToOggOpus(mp3: Buffer): Promise<Buffer> {
       'ffmpeg',
       [
         '-hide_banner',
-        '-loglevel', 'error',
-        '-i', 'pipe:0',
-        '-c:a', 'libopus',
-        '-b:a', '32k',
-        '-application', 'voip',
-        '-f', 'ogg',
+        '-loglevel',
+        'error',
+        '-i',
+        'pipe:0',
+        '-c:a',
+        'libopus',
+        '-b:a',
+        '32k',
+        '-application',
+        'voip',
+        '-f',
+        'ogg',
         'pipe:1',
       ],
       { stdio: ['pipe', 'pipe', 'pipe'] },
@@ -111,9 +115,7 @@ async function mp3ToOggOpus(mp3: Buffer): Promise<Buffer> {
       if (code === 0) resolve(Buffer.concat(out))
       else
         reject(
-          new Error(
-            `ffmpeg exited ${code}: ${Buffer.concat(err).toString('utf8').slice(-500)}`,
-          ),
+          new Error(`ffmpeg exited ${code}: ${Buffer.concat(err).toString('utf8').slice(-500)}`),
         )
     })
 

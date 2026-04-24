@@ -69,10 +69,7 @@ describe('logger redact', () => {
 
   it('redacts an apiKey field without affecting sibling diagnostic data', () => {
     const { log, lines } = makeBufferedLogger()
-    log.info(
-      { apiKey: 'GROQ-XYZ', model: 'whisper-large-v3', latencyMs: 412 },
-      'transcription',
-    )
+    log.info({ apiKey: 'GROQ-XYZ', model: 'whisper-large-v3', latencyMs: 412 }, 'transcription')
     const joined = lines.join('')
     expect(joined).not.toContain('GROQ-XYZ')
     expect(joined).toContain('whisper-large-v3')

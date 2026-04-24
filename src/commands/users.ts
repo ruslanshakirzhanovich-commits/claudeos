@@ -1,6 +1,11 @@
 import type { Bot } from 'grammy'
 import { isAdmin } from '../config.js'
-import { listAllowedChats, addAllowedChat, removeAllowedChat, isValidTelegramChatId } from '../db.js'
+import {
+  listAllowedChats,
+  addAllowedChat,
+  removeAllowedChat,
+  isValidTelegramChatId,
+} from '../db.js'
 
 export function registerUserCommands(bot: Bot): void {
   bot.command('listusers', async (ctx) => {
@@ -22,7 +27,9 @@ export function registerUserCommands(bot: Bot): void {
       const adminBadge = isAdmin(r.chat_id) ? ' [admin]' : ''
       return `• <code>${r.chat_id}</code>${adminBadge} (added ${added}${by}, seen ${seen})${note}`
     })
-    await ctx.reply(`<b>Authorised chats (${rows.length})</b>\n${lines.join('\n')}`, { parse_mode: 'HTML' })
+    await ctx.reply(`<b>Authorised chats (${rows.length})</b>\n${lines.join('\n')}`, {
+      parse_mode: 'HTML',
+    })
   })
 
   bot.command('adduser', async (ctx) => {
@@ -35,7 +42,10 @@ export function registerUserCommands(bot: Bot): void {
     const targetId = parts[1]?.trim()
     const note = parts.slice(2).join(' ').trim() || null
     if (!targetId || !isValidTelegramChatId(targetId)) {
-      await ctx.reply('Usage: /adduser &lt;chat_id&gt; [note]\n\nMust be a Telegram chat id (digits, optional minus). WhatsApp jids are managed separately.', { parse_mode: 'HTML' })
+      await ctx.reply(
+        'Usage: /adduser &lt;chat_id&gt; [note]\n\nMust be a Telegram chat id (digits, optional minus). WhatsApp jids are managed separately.',
+        { parse_mode: 'HTML' },
+      )
       return
     }
     const added = addAllowedChat(targetId, chatId, note)
@@ -58,7 +68,13 @@ export function registerUserCommands(bot: Bot): void {
       return
     }
     const r = removeAllowedChat(targetId)
-    if (!r.removed && r.memoriesDeleted === 0 && !r.sessionCleared && !r.preferencesCleared && r.tasksDeleted === 0) {
+    if (
+      !r.removed &&
+      r.memoriesDeleted === 0 &&
+      !r.sessionCleared &&
+      !r.preferencesCleared &&
+      r.tasksDeleted === 0
+    ) {
       await ctx.reply(`${targetId} was not in the list.`)
       return
     }

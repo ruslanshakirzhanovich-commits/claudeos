@@ -1,6 +1,20 @@
 import type { Bot } from 'grammy'
-import { isAdmin, CLAUDE_MODEL, PREVIEW_ENABLED, WHATSAPP_ENABLED, WHATSAPP_PROVIDER } from '../config.js'
-import { isAuthorised, isOpenMode, getSessionMeta, getTtsEnabled, countMemories, getPreferredModel, getEffortLevel } from '../db.js'
+import {
+  isAdmin,
+  CLAUDE_MODEL,
+  PREVIEW_ENABLED,
+  WHATSAPP_ENABLED,
+  WHATSAPP_PROVIDER,
+} from '../config.js'
+import {
+  isAuthorised,
+  isOpenMode,
+  getSessionMeta,
+  getTtsEnabled,
+  countMemories,
+  getPreferredModel,
+  getEffortLevel,
+} from '../db.js'
 import { isEffortLevel, effortLabel, CHAT_DEFAULT_EFFORT } from '../effort.js'
 import { voiceCapabilities } from '../voice.js'
 import { inflightCount } from '../inflight.js'
@@ -58,17 +72,20 @@ export function registerStatus(bot: Bot): void {
       : '(new on next message)'
 
     const voiceLine = `${tts ? 'ON' : 'OFF'}${caps.tts ? '' : ' · TTS not configured'}${caps.stt ? '' : ' · STT not configured'}`
-    const featuresLine = [
-      PREVIEW_ENABLED ? 'preview' : null,
-      WHATSAPP_ENABLED ? `whatsapp:${WHATSAPP_PROVIDER}` : null,
-    ]
-      .filter(Boolean)
-      .join(' · ') || 'none'
+    const featuresLine =
+      [
+        PREVIEW_ENABLED ? 'preview' : null,
+        WHATSAPP_ENABLED ? `whatsapp:${WHATSAPP_PROVIDER}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'none'
 
     const usage = getUsage(chatId)
     // Hit rate: include raw input in the denominator. Non-cached fresh input
     // is still a miss. Matches openclaw's formatCacheLine.
-    const cacheDenom = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
+    const cacheDenom = usage
+      ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens
+      : 0
     const hitPct = cacheDenom > 0 ? Math.round((usage!.cacheReadTokens / cacheDenom) * 100) : null
     const cacheLine = usage
       ? `${hitPct === null ? '0% hit' : `${hitPct}% hit`} · ${fmtCount(usage.cacheReadTokens)} cached, ${fmtCount(usage.cacheCreateTokens)} new`
@@ -76,11 +93,12 @@ export function registerStatus(bot: Bot): void {
     const ctxUsed = usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheCreateTokens : 0
     const ctxMax = usage?.contextWindow ?? 0
     const ctxPct = ctxMax > 0 ? Math.round((ctxUsed / ctxMax) * 100) : 0
-    const contextLine = ctxMax > 0
-      ? `${fmtCount(ctxUsed)}/${fmtCount(ctxMax)} (${ctxPct}%) · 🧹 Compactions: ${usage!.compactions}`
-      : usage
-        ? `🧹 Compactions: ${usage.compactions}`
-        : '(no turns yet)'
+    const contextLine =
+      ctxMax > 0
+        ? `${fmtCount(ctxUsed)}/${fmtCount(ctxMax)} (${ctxPct}%) · 🧹 Compactions: ${usage!.compactions}`
+        : usage
+          ? `🧹 Compactions: ${usage.compactions}`
+          : '(no turns yet)'
 
     const lines = [
       `🤖 <b>ClaudeClaw</b> v${BOT_VERSION} (${BOT_COMMIT})`,
