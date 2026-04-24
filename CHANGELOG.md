@@ -2,6 +2,22 @@
 
 Все заметные изменения ClaudeClaw.
 
+## [1.4.0] - 2026-04-24
+- 🔐 Preview-сервер: fail-fast на публичный bind без `PREVIEW_PASSWORD`, дефолт 127.0.0.1, 401 вместо pass-through
+- 🛡 `permissionMode` обязателен в `runAgent` — убран дефолт `bypassPermissions`, runtime-guard для JS-вызовов
+- 🔁 Гонка `usage_compactions` устранена: `recordUsage` больше не трогает счётчик, им владеет только атомарный `recordCompaction`
+- 🚦 Per-chat serialization запросов к агенту: два сообщения в одном чате больше не делят sessionId
+- ✂️ Единый `splitMessage` во всех каналах — WhatsApp больше не теряет длинные ответы
+- 🚨 CI: `npm audit --omit=dev --audit-level=high`, закрыты 3 critical CVE через `protobufjs` override
+- 🔏 `pino.redact` для токенов, Authorization и Telegram webhook secret — секреты больше не утекают в логи
+- ⏱ Token-bucket rate-limit на chatId (дефолт 10 burst, 10/мин) — защита от флуда при компрометации токена
+- 🧱 `runChatPipeline` — единое ядро для Telegram/Discord/WhatsApp (rate-limit, memory, agent, session, save)
+- 📏 Hard cap episodic per chat (дефолт 1000) + еженедельная консолидация episodic→semantic через agent SDK (off by default, `MEMORY_SUMMARIZE_ENABLED=1`)
+- 🔍 FTS sanitizer чинит русский: floor 3→2 chars, блок FTS5-keywords (AND/OR/NOT/NEAR), cap 5→6 токенов
+- 💾 Backup restore roundtrip test: проверяем FTS5 shadow tables после VACUUM INTO, отказ на битом/отсутствующем файле
+- 🔑 `ADMIN_DISCORD_USERS` и `ADMIN_WHATSAPP_NUMBERS` — явная admin-модель для Discord/WhatsApp, fail-closed дефолт
+- 🧪 177 тестов (было 67 в 1.3.0): chat-queue, chat-pipeline, rate-limit, logger-redact, memory-cap, backup-restore, fts-sanitizer, memory-summarize, whatsapp-handler
+
 ## [1.3.0] - 2026-04-23
 - 🎚 Команда `/models` с инлайн-клавиатурой: переключение Claude Opus/Sonnet/Haiku per-chat, выбор сохраняется в БД
 - ⚡ Команда `/effort` с 4 уровнями thinking budget (Low/Medium/High/Extra high), дефолт для чатов — Medium
