@@ -1,12 +1,19 @@
-import fs from 'node:fs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import { PROJECT_ROOT, CLAUDE_MD_PATH, CLAUDE_MODEL } from './config.js'
+import {
+  PROJECT_ROOT,
+  CLAUDE_MODEL,
+  AGENT_RETRY_ATTEMPTS,
+  AGENT_RETRY_BASE_MS,
+  AGENT_MAX_TURNS,
+  AGENT_STREAM_TIMEOUT_MS,
+} from './config.js'
 import { logger, type Logger } from './logger.js'
 import { trackInflight } from './inflight.js'
 import { runSerialPerChat } from './chat-queue.js'
 import { recordEvent } from './metrics.js'
 import { effortToThinkingTokens, isEffortLevel } from './effort.js'
 import { recordUsage, recordCompaction } from './usage.js'
+import { withRetry, isTransientError } from './retry.js'
 
 export interface AgentResult {
   text: string | null
@@ -25,41 +32,47 @@ export interface RunAgentOptions {
   chatId?: string
 }
 
-function loadClaudeMd(): string {
-  try {
-    return fs.readFileSync(CLAUDE_MD_PATH, 'utf8').trim()
-  } catch {
-    return ''
+// CLAUDE.md is loaded by the SDK itself from settingSources (['project','user']).
+// Injecting it into the user prompt would double the tokens and defeat the
+// automatic system-prompt cache. Only the per-request model override needs to
+// be appended.
+function buildSystemPrompt(activeModel: string | undefined): {
+  type: 'preset'
+  preset: 'claude_code'
+  append?: string
+} {
+  if (!activeModel) return { type: 'preset', preset: 'claude_code' }
+  return {
+    type: 'preset',
+    preset: 'claude_code',
+    append: `You are currently running as model id: ${activeModel}. When the user asks about your model, respond with this exact id.`,
   }
 }
 
-function wrapWithClaudeMd(userMessage: string, activeModel: string | undefined): string {
-  const claudeMd = loadClaudeMd()
-  const parts: string[] = []
-  if (activeModel) {
-    parts.push(
-      `You are currently running as model id: ${activeModel}. When the user asks about your model, respond with this exact id.`,
-    )
-  }
-  if (claudeMd) {
-    parts.push(
-      'You MUST follow these instructions at all times, this is your identity and personality:',
-      '',
-      claudeMd,
-    )
-  }
-  if (parts.length === 0) return userMessage
-  return parts.join('\n\n') + '\n\n---\nUser message:\n' + userMessage
-}
-
-export async function runAgent(
-  message: string,
-  opts: RunAgentOptions,
-): Promise<AgentResult> {
+export async function runAgent(message: string, opts: RunAgentOptions): Promise<AgentResult> {
   if (!opts || !opts.permissionMode) {
     throw new Error('runAgent: permissionMode is required (no implicit bypassPermissions)')
   }
-  const run = () => trackInflight(runAgentInner(message, opts))
+  // streamStarted is flipped inside runAgentInner as soon as the SDK emits
+  // any event. After that point a tool call may already have fired and a
+  // retry would be non-idempotent, so shouldRetry pins to false.
+  let streamStarted = false
+  const attempt = () => {
+    streamStarted = false
+    return runAgentInner(message, opts, () => {
+      streamStarted = true
+    })
+  }
+  const run = () =>
+    trackInflight(
+      withRetry(attempt, {
+        attempts: AGENT_RETRY_ATTEMPTS,
+        baseMs: AGENT_RETRY_BASE_MS,
+        label: 'runAgent',
+        log: opts.log ?? logger,
+        shouldRetry: (err) => !streamStarted && isTransientError(err),
+      }),
+    )
   if (opts.chatId) return runSerialPerChat(opts.chatId, run)
   return run()
 }
@@ -67,13 +80,15 @@ export async function runAgent(
 async function runAgentInner(
   message: string,
   opts: RunAgentOptions,
+  onStreamStart: () => void,
 ): Promise<AgentResult> {
   const { sessionId, onTyping, permissionMode, log = logger, model, effort, chatId } = opts
   const effectiveModel = model || CLAUDE_MODEL || undefined
-  const wrapped = wrapWithClaudeMd(message, effectiveModel)
   const effectiveEffort = isEffortLevel(effort) ? effort : undefined
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
+  const abortController = new AbortController()
+  const timeoutTimer = setTimeout(() => abortController.abort(), AGENT_STREAM_TIMEOUT_MS)
 
   let text: string | null = null
   let newSessionId: string | undefined
@@ -83,14 +98,18 @@ async function runAgentInner(
       cwd: PROJECT_ROOT,
       settingSources: ['project', 'user'],
       permissionMode,
+      systemPrompt: buildSystemPrompt(effectiveModel),
+      maxTurns: AGENT_MAX_TURNS,
+      abortController,
     }
     if (sessionId) options['resume'] = sessionId
     if (effectiveModel) options['model'] = effectiveModel
     if (effectiveEffort) options['maxThinkingTokens'] = effortToThinkingTokens(effectiveEffort)
 
-    const stream = query({ prompt: wrapped, options: options as any })
+    const stream = query({ prompt: message, options: options as any })
 
     for await (const event of stream as AsyncIterable<any>) {
+      onStreamStart()
       if (event?.type === 'system' && event?.subtype === 'init' && event?.session_id) {
         newSessionId = event.session_id
       } else if (event?.type === 'system' && event?.subtype === 'compact_boundary') {
@@ -115,7 +134,13 @@ async function runAgentInner(
                 cacheCreationInputTokens: a.cacheCreationInputTokens + b.cacheCreationInputTokens,
                 contextWindow: Math.max(a.contextWindow, b.contextWindow),
               }),
-              { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, contextWindow: 0 },
+              {
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheReadInputTokens: 0,
+                cacheCreationInputTokens: 0,
+                contextWindow: 0,
+              },
             )
             recordUsage(chatId, agg)
           }
@@ -128,6 +153,7 @@ async function runAgentInner(
     throw err
   } finally {
     if (typingTimer) clearInterval(typingTimer)
+    clearTimeout(timeoutTimer)
   }
 
   recordEvent('agent_success')
