@@ -79,3 +79,14 @@ export function resetRateLimitForTest(): void {
 export function rateLimitBucketsForTest(): ReadonlyMap<string, Bucket> {
   return buckets
 }
+
+const ADMIN_LIMIT_CAPACITY = 5
+const ADMIN_LIMIT_REFILL_PER_MS = 5 / 60_000
+
+export function tryConsumeAdmin(chatId: string): RateLimitDecision {
+  return tryConsume(`admin:${chatId}`, {
+    capacity: ADMIN_LIMIT_CAPACITY,
+    refillPerMs: ADMIN_LIMIT_REFILL_PER_MS,
+    maxTracked: 1000,
+  })
+}
