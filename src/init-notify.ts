@@ -16,10 +16,7 @@ export async function notifyAdminsOnCrash(err: unknown, kind: string): Promise<v
   }
 }
 
-export async function notifyAdminsOnInitFailure(
-  channel: string,
-  err: unknown,
-): Promise<void> {
+export async function notifyAdminsOnInitFailure(channel: string, err: unknown): Promise<void> {
   if (!shouldNotifyCrash(`init:${channel}`, err)) return
   const msg = (err as Error)?.message ?? String(err)
   for (const adminId of ADMIN_CHAT_IDS) {

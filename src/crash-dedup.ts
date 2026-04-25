@@ -7,11 +7,7 @@ export function crashSignature(kind: string, err: unknown): string {
   return `${kind}::${stack.slice(0, 200)}`
 }
 
-export function shouldNotifyCrash(
-  kind: string,
-  err: unknown,
-  now: number = Date.now(),
-): boolean {
+export function shouldNotifyCrash(kind: string, err: unknown, now: number = Date.now()): boolean {
   const sig = crashSignature(kind, err)
   const last = recentCrashes.get(sig)
   if (last !== undefined && now - last < CRASH_DEDUP_WINDOW_MS) return false

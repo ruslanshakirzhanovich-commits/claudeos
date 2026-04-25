@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  shouldNotifyCrash,
-  crashSignature,
-  resetCrashDedupForTest,
-} from '../src/crash-dedup.js'
+import { shouldNotifyCrash, crashSignature, resetCrashDedupForTest } from '../src/crash-dedup.js'
 
 beforeEach(() => {
   resetCrashDedupForTest()
