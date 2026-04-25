@@ -16,6 +16,8 @@ import {
   BACKUP_SCHEDULE_ENABLED,
   BACKUP_INTERVAL_HOURS,
   BACKUP_KEEP,
+  MAINTENANCE_ENABLED,
+  MAINTENANCE_INTERVAL_HOURS,
   MEMORY_SUMMARIZE_ENABLED,
   MEMORY_SUMMARIZE_INTERVAL_HOURS,
   MEMORY_SUMMARIZE_MIN_AGE_DAYS,
@@ -42,6 +44,7 @@ import { initDiscord, stopDiscord } from './discord/index.js'
 import { createChannelRouter } from './channel-router.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
+import { initMaintenanceSchedule } from './maintenance.js'
 import { recordCrash } from './metrics.js'
 import { notifyAdminsOnCrash, notifyAdminsOnInitFailure } from './init-notify.js'
 import { runMemorySummarizeSweep, summarizeViaAgentSdk } from './memory-summarize.js'
@@ -177,6 +180,13 @@ async function main(): Promise<void> {
     logger.warn('BACKUP_SCHEDULE_ENABLED=0 — automatic backups disabled')
   }
 
+  const maintenanceTimer = MAINTENANCE_ENABLED
+    ? initMaintenanceSchedule(MAINTENANCE_INTERVAL_HOURS)
+    : null
+  if (!MAINTENANCE_ENABLED) {
+    logger.warn('MAINTENANCE_ENABLED=0 — VACUUM/ANALYZE disabled')
+  }
+
   const startedAt = Date.now()
   let healthServer: HealthServer | null = null
   if (HEALTH_ENABLED) {
@@ -243,6 +253,7 @@ async function main(): Promise<void> {
     clearInterval(decayTimer)
     clearInterval(schedulerTimer)
     if (backupTimer) clearInterval(backupTimer)
+    if (maintenanceTimer) clearInterval(maintenanceTimer)
     if (summarizeTimer) clearInterval(summarizeTimer)
     try {
       await bot.stop()
