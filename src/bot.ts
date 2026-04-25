@@ -38,33 +38,36 @@ import {
 import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { trackInflight } from './inflight.js'
+import { sendAllChunksOrMark } from './chunked-send.js'
 import { wrapUntrusted } from './untrusted.js'
 import { resetUsage } from './usage.js'
 import { rateLimitMessage } from './rate-limit.js'
 import { runChatPipeline } from './chat-pipeline.js'
 
+async function sendOneTelegramChunk(ctx: Context, chunk: string): Promise<void> {
+  // First try HTML; on a non-transient HTML error (parser issues), fall
+  // back to plain text. Transient HTML errors propagate so the outer
+  // sendAllChunksOrMark retry counts them as one failed attempt.
+  try {
+    await ctx.reply(chunk, { parse_mode: 'HTML' })
+  } catch (err) {
+    if (isTransientError(err)) throw err
+    logger.warn({ err }, 'HTML send failed, falling back to plain text')
+    await ctx.reply(chunk)
+  }
+}
+
 async function sendResponse(ctx: Context, text: string): Promise<void> {
   if (!text) {
-    await withRetry(() => ctx.reply('(no output)'), { label: 'tg-reply-empty' }).catch(() => {})
+    await ctx.reply('(no output)').catch(() => {})
     return
   }
   const formatted = formatForTelegram(text)
-  for (const chunk of splitMessage(formatted)) {
-    try {
-      await withRetry(() => ctx.reply(chunk, { parse_mode: 'HTML' }), { label: 'tg-reply-html' })
-    } catch (err) {
-      if (isTransientError(err)) {
-        logger.error({ err }, 'HTML send exhausted retries')
-        continue
-      }
-      logger.warn({ err }, 'HTML send failed, falling back to plain text')
-      try {
-        await withRetry(() => ctx.reply(chunk), { label: 'tg-reply-plain' })
-      } catch (err2) {
-        logger.error({ err: err2 }, 'plain text send failed too')
-      }
-    }
-  }
+  await sendAllChunksOrMark(
+    splitMessage(formatted),
+    (chunk) => sendOneTelegramChunk(ctx, chunk),
+    logger,
+  )
 }
 
 const openModeWarnedChats = new Set<string>()
