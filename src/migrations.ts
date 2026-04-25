@@ -176,6 +176,34 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 8,
+    name: 'users + user_chats',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+          user_id TEXT PRIMARY KEY,
+          display_name TEXT,
+          is_admin INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_chats (
+          chat_id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+          channel TEXT NOT NULL CHECK(channel IN ('telegram','discord','whatsapp')),
+          added_at INTEGER NOT NULL,
+          added_by TEXT,
+          note TEXT,
+          last_seen_at INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_chats_user
+          ON user_chats(user_id);
+      `)
+      // Data move comes in Task 4, after src/users.ts exists.
+    },
+  },
 ]
 
 export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): number {
