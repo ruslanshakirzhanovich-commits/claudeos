@@ -3,6 +3,7 @@ import { getSession, setSession, getEffortLevel, getPreferredModel } from './db.
 import { buildMemoryContext, saveConversationTurn } from './memory.js'
 import { CHAT_DEFAULT_EFFORT, isEffortLevel } from './effort.js'
 import { tryConsume } from './rate-limit.js'
+import { runSerialPerChat } from './chat-queue.js'
 import type { Logger } from './logger.js'
 
 export interface ChatTurnInput {
@@ -28,27 +29,29 @@ export async function runChatPipeline(input: ChatTurnInput): Promise<ChatTurnRes
     input.log.warn({ retryAfterMs: rl.retryAfterMs }, 'rate limited')
     return { kind: 'rate-limited', retryAfterMs: rl.retryAfterMs }
   }
-  try {
-    const memoryContext = await buildMemoryContext(input.chatId, input.userMessage)
-    const messageForAgent = memoryContext
-      ? `${memoryContext}\n\n${input.wrappedUserMessage}`
-      : input.wrappedUserMessage
-    const sessionId = getSession(input.chatId) ?? undefined
-    const model = getPreferredModel(input.chatId) ?? undefined
-    const storedEffort = getEffortLevel(input.chatId)
-    const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
-    const { text, newSessionId } = await runAgent(messageForAgent, {
-      sessionId,
-      permissionMode: input.permissionMode,
-      log: input.log,
-      model,
-      effort,
-      chatId: input.chatId,
-    })
-    if (newSessionId && newSessionId !== sessionId) setSession(input.chatId, newSessionId)
-    if (text) await saveConversationTurn(input.chatId, input.userMessage, text)
-    return { kind: 'ok', text }
-  } catch (err) {
-    return { kind: 'error', error: err as Error }
-  }
+  return runSerialPerChat(input.chatId, async (): Promise<ChatTurnResult> => {
+    try {
+      const memoryContext = await buildMemoryContext(input.chatId, input.userMessage)
+      const messageForAgent = memoryContext
+        ? `${memoryContext}\n\n${input.wrappedUserMessage}`
+        : input.wrappedUserMessage
+      const sessionId = getSession(input.chatId) ?? undefined
+      const model = getPreferredModel(input.chatId) ?? undefined
+      const storedEffort = getEffortLevel(input.chatId)
+      const effort = isEffortLevel(storedEffort) ? storedEffort : CHAT_DEFAULT_EFFORT
+      const { text, newSessionId } = await runAgent(messageForAgent, {
+        sessionId,
+        permissionMode: input.permissionMode,
+        log: input.log,
+        model,
+        effort,
+        chatId: input.chatId,
+      })
+      if (newSessionId && newSessionId !== sessionId) setSession(input.chatId, newSessionId)
+      if (text) await saveConversationTurn(input.chatId, input.userMessage, text)
+      return { kind: 'ok', text }
+    } catch (err) {
+      return { kind: 'error', error: err as Error }
+    }
+  })
 }
