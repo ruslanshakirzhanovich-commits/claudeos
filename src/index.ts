@@ -43,6 +43,7 @@ import { createChannelRouter } from './channel-router.js'
 import { waitForInflight, inflightCount } from './inflight.js'
 import { initBackupSchedule } from './backup.js'
 import { recordCrash } from './metrics.js'
+import { notifyAdminsOnCrash, notifyAdminsOnInitFailure } from './init-notify.js'
 import { runMemorySummarizeSweep, summarizeViaAgentSdk } from './memory-summarize.js'
 
 const INFLIGHT_DRAIN_TIMEOUT_MS = 30_000
@@ -158,8 +159,14 @@ async function main(): Promise<void> {
   // for Discord/WhatsApp chats silently failed at delivery time.
   const schedulerTimer = initScheduler(createChannelRouter())
 
-  initWhatsApp().catch((err) => logger.error({ err }, 'WhatsApp init failed (continuing without)'))
-  initDiscord().catch((err) => logger.error({ err }, 'Discord init failed (continuing without)'))
+  initWhatsApp().catch(async (err) => {
+    logger.error({ err }, 'WhatsApp init failed (continuing without)')
+    await notifyAdminsOnInitFailure('WhatsApp', err)
+  })
+  initDiscord().catch(async (err) => {
+    logger.error({ err }, 'Discord init failed (continuing without)')
+    await notifyAdminsOnInitFailure('Discord', err)
+  })
 
   const previewServer = PREVIEW_ENABLED ? createPreviewServer(PREVIEW_PORT) : null
 
@@ -263,16 +270,6 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'))
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
-  const notifyAdminsOnCrash = async (err: unknown, kind: string) => {
-    for (const adminId of ADMIN_CHAT_IDS) {
-      try {
-        const msg = (err as Error)?.stack ?? (err as Error)?.message ?? String(err)
-        await sendToChat(adminId, `⚠️ ${kind}\n\n<pre>${msg.slice(0, 3000)}</pre>`)
-      } catch {
-        /* ignore — alert is best-effort */
-      }
-    }
-  }
   process.on('uncaughtException', (err) => {
     logger.error({ err }, 'uncaughtException')
     recordCrash('uncaughtException', err)
