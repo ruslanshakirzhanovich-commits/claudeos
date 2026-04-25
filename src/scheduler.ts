@@ -5,6 +5,7 @@ import { runAgent } from './agent.js'
 import { logger } from './logger.js'
 import { SCHEDULER_POLL_MS } from './config.js'
 import { recordEvent } from './metrics.js'
+import { runSerialPerChat } from './chat-queue.js'
 
 const { parseExpression } = (cronParser as any).default ?? cronParser
 
@@ -85,64 +86,75 @@ function countMissedTicks(
 export async function runDueTasks(send: Sender): Promise<void> {
   const tasks = getDueTasks()
   for (const task of tasks) {
-    const now = Date.now()
-    const since = task.last_run ?? task.created_at
-    const { missed, capped } = countMissedTicks(task.schedule, since, now)
+    await runSerialPerChat(task.chat_id, async () => {
+      const now = Date.now()
+      const since = task.last_run ?? task.created_at
+      const { missed, capped } = countMissedTicks(task.schedule, since, now)
 
-    if (missed > 0) {
-      logger.warn({ id: task.id, missed, capped }, 'scheduled task had missed ticks')
-      recordEvent(
-        'scheduler_missed',
-        capped ? { id: task.id, missed, capped: true } : { id: task.id, missed },
-      )
-    }
-
-    const prefix = missed > 0 ? `(missed ${missed}) ` : ''
-    logger.info({ id: task.id, prompt: task.prompt.slice(0, 60), missed }, 'running scheduled task')
-
-    try {
-      await send(task.chat_id, `${prefix}Running scheduled task: ${task.prompt.slice(0, 120)}`)
-      recordEvent('scheduler_run')
-      // Scheduled tasks are admin-created via CLI — keep full permissions.
-      // Pass chatId so token usage is attributed to the owning chat (visible
-      // in /status usage counters and /health), not lost as anonymous runs.
-      const { text } = await runAgent(task.prompt, {
-        permissionMode: 'bypassPermissions',
-        chatId: task.chat_id,
-      })
-      const result = text ?? '(no output)'
-      const nextRun = computeNextRun(task.schedule)
-      const changes = updateTaskAfterRun(task.id, nextRun, result, missed, missed > 0 ? now : null)
-      if (changes === 0) {
-        logger.warn({ id: task.id }, 'task disappeared mid-run, update skipped')
-        continue
+      if (missed > 0) {
+        logger.warn({ id: task.id, missed, capped }, 'scheduled task had missed ticks')
+        recordEvent(
+          'scheduler_missed',
+          capped ? { id: task.id, missed, capped: true } : { id: task.id, missed },
+        )
       }
-      await send(task.chat_id, result)
-    } catch (err) {
-      const msg = (err as Error).message ?? String(err)
-      logger.error({ err, id: task.id }, 'scheduled task failed')
+
+      const prefix = missed > 0 ? `(missed ${missed}) ` : ''
+      logger.info(
+        { id: task.id, prompt: task.prompt.slice(0, 60), missed },
+        'running scheduled task',
+      )
+
       try {
+        await send(task.chat_id, `${prefix}Running scheduled task: ${task.prompt.slice(0, 120)}`)
+        recordEvent('scheduler_run')
+        // Scheduled tasks are admin-created via CLI — keep full permissions.
+        // Pass chatId so token usage is attributed to the owning chat (visible
+        // in /status usage counters and /health), not lost as anonymous runs.
+        const { text } = await runAgent(task.prompt, {
+          permissionMode: 'bypassPermissions',
+          chatId: task.chat_id,
+        })
+        const result = text ?? '(no output)'
         const nextRun = computeNextRun(task.schedule)
         const changes = updateTaskAfterRun(
           task.id,
           nextRun,
-          `ERROR: ${msg}`,
+          result,
           missed,
           missed > 0 ? now : null,
         )
         if (changes === 0) {
-          logger.warn({ id: task.id }, 'task disappeared mid-run, failure update skipped')
-          continue
+          logger.warn({ id: task.id }, 'task disappeared mid-run, update skipped')
+          return
         }
-      } catch {
-        /* ignore */
+        await send(task.chat_id, result)
+      } catch (err) {
+        const msg = (err as Error).message ?? String(err)
+        logger.error({ err, id: task.id }, 'scheduled task failed')
+        try {
+          const nextRun = computeNextRun(task.schedule)
+          const changes = updateTaskAfterRun(
+            task.id,
+            nextRun,
+            `ERROR: ${msg}`,
+            missed,
+            missed > 0 ? now : null,
+          )
+          if (changes === 0) {
+            logger.warn({ id: task.id }, 'task disappeared mid-run, failure update skipped')
+            return
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          await send(task.chat_id, `Scheduled task ${task.id} failed: ${msg}`)
+        } catch {
+          /* ignore */
+        }
       }
-      try {
-        await send(task.chat_id, `Scheduled task ${task.id} failed: ${msg}`)
-      } catch {
-        /* ignore */
-      }
-    }
+    })
   }
 }
 
