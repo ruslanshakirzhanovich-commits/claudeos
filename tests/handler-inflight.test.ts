@@ -9,12 +9,8 @@ vi.mock('../src/logger.js', () => {
 vi.mock('../src/config.js', () => ({
   TYPING_REFRESH_MS: 4000,
   MAX_MESSAGE_LENGTH: 4096,
-  isDiscordUserAuthorisedOf: () => true,
-  isDiscordUserAdminOf: () => false,
   isDiscordUserAuthorised: () => true,
   isDiscordUserAdmin: () => false,
-  isWhatsAppAuthorisedOf: () => true,
-  isWhatsAppNumberAdminOf: () => false,
   isWhatsAppAuthorised: () => true,
   isWhatsAppNumberAdmin: () => false,
 }))
