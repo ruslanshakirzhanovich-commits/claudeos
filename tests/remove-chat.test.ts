@@ -116,3 +116,13 @@ describe('removeAllowedChat cascades', () => {
     removeAllowedChat(OTHER)
   })
 })
+
+describe('removeAllowedChat user-cascade (v8)', () => {
+  it('deletes the user when its last chat is removed', async () => {
+    const { addUserChat, getUserByChat } = await import('../src/users.js')
+    addUserChat({ chatId: '123456', channel: 'telegram' })
+    expect(getUserByChat('123456')).not.toBeNull()
+    removeAllowedChat('123456')
+    expect(getUserByChat('123456')).toBeNull()
+  })
+})
