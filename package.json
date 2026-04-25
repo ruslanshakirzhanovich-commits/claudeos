@@ -1,6 +1,6 @@
 {
   "name": "claudeclaw",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "description": "Personal AI assistant that bridges Claude Code to Telegram",
   "type": "module",
   "scripts": {
