@@ -4,8 +4,9 @@ import fsp from 'node:fs/promises'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { Bot } from 'grammy'
-import { isAdmin, PROJECT_ROOT, STORE_DIR } from '../config.js'
+import { PROJECT_ROOT, STORE_DIR } from '../config.js'
 import { logger } from '../logger.js'
+import { adminGuard } from './_admin-guard.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -107,11 +108,8 @@ export function registerUpdate(bot: Bot): void {
   const DEPLOY_LOG = deployLogPath(STORE_DIR)
 
   bot.command('update', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
 
     const args = (ctx.message?.text ?? '').split(/\s+/).slice(1)
     const dryRun = args.includes('--dry') || args.includes('-n')
@@ -163,11 +161,8 @@ export function registerUpdate(bot: Bot): void {
   })
 
   bot.command('updatelog', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
     const tail = await readDeployLogTail(STORE_DIR, 200)
     await ctx.reply(`<pre>${tail}</pre>`, { parse_mode: 'HTML' }).catch(async () => {
       // Fallback to plain text if the log contains HTML-hostile characters.

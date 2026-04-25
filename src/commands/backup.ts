@@ -1,18 +1,16 @@
 import type { Bot } from 'grammy'
 import { InputFile } from 'grammy'
-import { isAdmin, BACKUP_KEEP } from '../config.js'
+import { BACKUP_KEEP } from '../config.js'
 import { createAndVerifyBackup, rotateBackups } from '../backup.js'
 import { logger } from '../logger.js'
+import { adminGuard } from './_admin-guard.js'
 
 const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024
 
 export function registerBackup(bot: Bot): void {
   bot.command('backup', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
     try {
       let result
       try {

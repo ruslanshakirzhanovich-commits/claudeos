@@ -1,7 +1,7 @@
 import type { Bot } from 'grammy'
-import { isAdmin } from '../config.js'
 import { snapshot } from '../metrics.js'
 import { inflightCount } from '../inflight.js'
+import { adminGuard } from './_admin-guard.js'
 
 function fmtAgo(ts: number | null): string {
   if (!ts) return 'never'
@@ -16,11 +16,8 @@ function fmtAgo(ts: number | null): string {
 
 export function registerHealth(bot: Bot): void {
   bot.command('health', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
     const s = snapshot()
     const c = s.counters
     const errorRate =

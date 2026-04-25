@@ -3,6 +3,7 @@ import { isAdmin } from '../config.js'
 import { listAllowedChats, removeAllowedChat } from '../db.js'
 import { addUserChat } from '../users.js'
 import { classifyChatId, type ChannelKind } from '../channel.js'
+import { adminGuard } from './_admin-guard.js'
 
 export interface ParsedAddUserArgs {
   chatId: string
@@ -52,11 +53,8 @@ export function parseAddUserArgs(args: string[]): ParsedAddUserArgs | null {
 
 export function registerUserCommands(bot: Bot): void {
   bot.command('listusers', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
     const rows = listAllowedChats()
     if (!rows.length) {
       await ctx.reply('No authorised chats yet (open mode).')
@@ -76,11 +74,9 @@ export function registerUserCommands(bot: Bot): void {
   })
 
   bot.command('adduser', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
+    const { chatId } = guard
     const tokens = (ctx.message?.text ?? '').split(/\s+/).slice(1).filter(Boolean)
     const parsed = parseAddUserArgs(tokens)
     if (!parsed) {
@@ -119,11 +115,8 @@ export function registerUserCommands(bot: Bot): void {
   })
 
   bot.command('removeuser', async (ctx) => {
-    const chatId = String(ctx.chat?.id ?? '')
-    if (!isAdmin(chatId)) {
-      await ctx.reply('Admin only.')
-      return
-    }
+    const guard = await adminGuard(ctx)
+    if (!guard.ok) return
     const targetId = (ctx.message?.text ?? '').split(/\s+/)[1]?.trim()
     if (!targetId || classifyChatId(targetId) === 'unknown') {
       await ctx.reply(
