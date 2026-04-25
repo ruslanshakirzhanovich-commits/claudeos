@@ -1,11 +1,54 @@
 import type { Bot } from 'grammy'
 import { isAdmin } from '../config.js'
-import {
-  listAllowedChats,
-  addAllowedChat,
-  removeAllowedChat,
-  isValidTelegramChatId,
-} from '../db.js'
+import { listAllowedChats, removeAllowedChat } from '../db.js'
+import { addUserChat } from '../users.js'
+import { classifyChatId, type ChannelKind } from '../channel.js'
+
+export interface ParsedAddUserArgs {
+  chatId: string
+  channel: Exclude<ChannelKind, 'unknown'>
+  isAdmin: boolean
+  existingUserId: string | undefined
+  note: string | null
+}
+
+export function parseAddUserArgs(args: string[]): ParsedAddUserArgs | null {
+  if (args.length === 0) return null
+  const chatId = args[0]!.trim()
+  if (!chatId) return null
+  const channel = classifyChatId(chatId)
+  if (channel === 'unknown') return null
+
+  let isAdminFlag = false
+  let existingUserId: string | undefined
+  let noteParts: string[] = []
+
+  let i = 1
+  while (i < args.length) {
+    const t = args[i]!
+    if (t === '--admin') {
+      isAdminFlag = true
+      i++
+    } else if (t === '--user-id') {
+      existingUserId = args[i + 1]
+      if (!existingUserId) return null
+      i += 2
+    } else if (t === '--note') {
+      noteParts = args.slice(i + 1)
+      break
+    } else {
+      return null
+    }
+  }
+
+  return {
+    chatId,
+    channel,
+    isAdmin: isAdminFlag,
+    existingUserId,
+    note: noteParts.length > 0 ? noteParts.join(' ') : null,
+  }
+}
 
 export function registerUserCommands(bot: Bot): void {
   bot.command('listusers', async (ctx) => {
@@ -38,18 +81,42 @@ export function registerUserCommands(bot: Bot): void {
       await ctx.reply('Admin only.')
       return
     }
-    const parts = (ctx.message?.text ?? '').split(/\s+/)
-    const targetId = parts[1]?.trim()
-    const note = parts.slice(2).join(' ').trim() || null
-    if (!targetId || !isValidTelegramChatId(targetId)) {
+    const tokens = (ctx.message?.text ?? '').split(/\s+/).slice(1).filter(Boolean)
+    const parsed = parseAddUserArgs(tokens)
+    if (!parsed) {
       await ctx.reply(
-        'Usage: /adduser &lt;chat_id&gt; [note]\n\nMust be a Telegram chat id (digits, optional minus). WhatsApp jids are managed separately.',
+        [
+          'Usage:',
+          '<code>/adduser &lt;chat_id&gt; [--admin] [--user-id u_xxxxxxxx] [--note &lt;text&gt;]</code>',
+          '',
+          'chat_id can be:',
+          '• Telegram numeric (e.g. <code>123456789</code>)',
+          '• Discord (e.g. <code>discord:110440505</code>)',
+          '• WhatsApp JID (e.g. <code>15551234567@s.whatsapp.net</code>)',
+        ].join('\n'),
         { parse_mode: 'HTML' },
       )
       return
     }
-    const added = addAllowedChat(targetId, chatId, note)
-    await ctx.reply(added ? `Added ${targetId}.` : `${targetId} was already authorised.`)
+
+    try {
+      const r = addUserChat({
+        chatId: parsed.chatId,
+        channel: parsed.channel,
+        isAdmin: parsed.isAdmin || undefined,
+        existingUserId: parsed.existingUserId,
+        note: parsed.note ?? undefined,
+        addedBy: chatId,
+      })
+      const verb = r.created ? 'created user' : 'linked to existing user'
+      const adminBadge = parsed.isAdmin ? ' [admin]' : ''
+      await ctx.reply(
+        `Added ${parsed.chatId}${adminBadge} — ${verb} <code>${r.userId}</code>`,
+        { parse_mode: 'HTML' },
+      )
+    } catch (err) {
+      await ctx.reply(`Failed: ${(err as Error).message.slice(0, 200)}`)
+    }
   })
 
   bot.command('removeuser', async (ctx) => {
@@ -59,12 +126,15 @@ export function registerUserCommands(bot: Bot): void {
       return
     }
     const targetId = (ctx.message?.text ?? '').split(/\s+/)[1]?.trim()
-    if (!targetId || !isValidTelegramChatId(targetId)) {
-      await ctx.reply('Usage: /removeuser &lt;chat_id&gt;', { parse_mode: 'HTML' })
+    if (!targetId || classifyChatId(targetId) === 'unknown') {
+      await ctx.reply(
+        'Usage: <code>/removeuser &lt;chat_id&gt;</code>\n\nAccepts Telegram numeric, Discord, or WhatsApp JID format.',
+        { parse_mode: 'HTML' },
+      )
       return
     }
     if (isAdmin(targetId)) {
-      await ctx.reply('Cannot remove an admin. Edit ADMIN_CHAT_IDS in .env first.')
+      await ctx.reply('Cannot remove an admin chat. Demote first by editing the user record.')
       return
     }
     const r = removeAllowedChat(targetId)
@@ -78,13 +148,13 @@ export function registerUserCommands(bot: Bot): void {
       await ctx.reply(`${targetId} was not in the list.`)
       return
     }
-    const pieces = [
-      r.removed ? 'allowlist' : null,
-      r.preferencesCleared ? 'prefs' : null,
-      r.sessionCleared ? 'session' : null,
-      r.memoriesDeleted > 0 ? `${r.memoriesDeleted} memories` : null,
-      r.tasksDeleted > 0 ? `${r.tasksDeleted} tasks` : null,
-    ].filter(Boolean)
-    await ctx.reply(`Removed ${targetId} — purged: ${pieces.join(', ')}.`)
+    const lines = [
+      `Removed ${targetId}.`,
+      `• memories deleted: ${r.memoriesDeleted}`,
+      `• tasks deleted: ${r.tasksDeleted}`,
+      `• session cleared: ${r.sessionCleared}`,
+      `• preferences cleared: ${r.preferencesCleared}`,
+    ]
+    await ctx.reply(lines.join('\n'))
   })
 }
