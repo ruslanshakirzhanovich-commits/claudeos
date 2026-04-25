@@ -22,10 +22,13 @@ export function registerBackup(bot: Bot): void {
         return
       }
       const { path: destPath, sizeBytes, verification: v } = result
-      const removed = rotateBackups(BACKUP_KEEP)
+      const rotation = rotateBackups(BACKUP_KEEP)
       const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2)
       const verifyLine = ` · verified (schema v${v.schemaVersion}, ${v.sessions} sessions, ${v.memories} memories, ${v.allowedChats} chats)`
-      const rotatedLine = removed > 0 ? ` · pruned ${removed} old` : ''
+      const rotatedLine =
+        rotation.removed > 0 || rotation.failed > 0
+          ? ` · pruned ${rotation.removed} old${rotation.failed > 0 ? ` (${rotation.failed} failed)` : ''}`
+          : ''
       await ctx.reply(
         `Backup saved: <code>${destPath}</code> (${sizeMb} MB)${verifyLine}${rotatedLine}`,
         { parse_mode: 'HTML' },

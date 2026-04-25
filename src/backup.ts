@@ -29,9 +29,15 @@ export function createAndVerifyBackup(): BackupResult {
   return { path: destPath, sizeBytes, verification }
 }
 
-export function rotateBackups(keep: number): number {
+export interface RotationResult {
+  requested: number
+  removed: number
+  failed: number
+}
+
+export function rotateBackups(keep: number): RotationResult {
   const dir = backupsDir()
-  if (!fs.existsSync(dir)) return 0
+  if (!fs.existsSync(dir)) return { requested: 0, removed: 0, failed: 0 }
   const files = fs
     .readdirSync(dir)
     .filter((f) => BACKUP_FILENAME_RE.test(f))
@@ -43,15 +49,17 @@ export function rotateBackups(keep: number): number {
     .sort((a, b) => b.mtime - a.mtime)
   const toRemove = files.slice(Math.max(0, keep))
   let removed = 0
+  let failed = 0
   for (const f of toRemove) {
     try {
       fs.unlinkSync(f.full)
       removed++
     } catch (err) {
+      failed++
       logger.warn({ err, file: f.name }, 'failed to remove old backup')
     }
   }
-  return removed
+  return { requested: toRemove.length, removed, failed }
 }
 
 export function initBackupSchedule(intervalHours: number, keep: number): NodeJS.Timeout {
@@ -59,15 +67,17 @@ export function initBackupSchedule(intervalHours: number, keep: number): NodeJS.
   const run = () => {
     try {
       const result = createAndVerifyBackup()
-      const removed = rotateBackups(keep)
+      const rotation = rotateBackups(keep)
       recordEvent('backup_ok')
-      logger.info(
+      const logFn =
+        rotation.failed > 0 ? logger.warn.bind(logger) : logger.info.bind(logger)
+      logFn(
         {
           path: result.path,
           sizeBytes: result.sizeBytes,
           schemaVersion: result.verification.schemaVersion,
           memories: result.verification.memories,
-          removedOld: removed,
+          rotation,
         },
         'scheduled backup ok',
       )

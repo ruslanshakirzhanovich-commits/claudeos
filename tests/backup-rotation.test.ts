@@ -44,8 +44,8 @@ describe('rotateBackups', () => {
     touch('claudeclaw-2026-04-22T00-00-00.db', now - 1 * 86400_000)
     touch('claudeclaw-2026-04-23T00-00-00.db', now)
 
-    const removed = rotateBackups(2)
-    expect(removed).toBe(2)
+    const res = rotateBackups(2)
+    expect(res).toEqual({ requested: 2, removed: 2, failed: 0 })
 
     const left = fs.readdirSync(dir).sort()
     expect(left).toEqual(['claudeclaw-2026-04-22T00-00-00.db', 'claudeclaw-2026-04-23T00-00-00.db'])
@@ -54,8 +54,8 @@ describe('rotateBackups', () => {
   it('ignores non-backup files in the dir', () => {
     touch('claudeclaw-2026-04-23T00-00-00.db', Date.now())
     touch('readme.txt', Date.now())
-    const removed = rotateBackups(1)
-    expect(removed).toBe(0)
+    const res = rotateBackups(1)
+    expect(res).toEqual({ requested: 0, removed: 0, failed: 0 })
     expect(fs.readdirSync(dir).sort()).toEqual(['claudeclaw-2026-04-23T00-00-00.db', 'readme.txt'])
   })
 
@@ -66,13 +66,13 @@ describe('rotateBackups', () => {
         Date.now() - (9 - i) * 86400_000,
       )
     }
-    const removed = rotateBackups(3)
-    expect(removed).toBe(7)
+    const res = rotateBackups(3)
+    expect(res).toEqual({ requested: 7, removed: 7, failed: 0 })
     expect(fs.readdirSync(dir).length).toBe(3)
   })
 
-  it('returns 0 when backups dir does not exist', () => {
+  it('returns zeros when backups dir does not exist', () => {
     fs.rmSync(dir, { recursive: true, force: true })
-    expect(rotateBackups(5)).toBe(0)
+    expect(rotateBackups(5)).toEqual({ requested: 0, removed: 0, failed: 0 })
   })
 })
