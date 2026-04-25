@@ -10,6 +10,7 @@ import { splitMessage } from '../format.js'
 import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
 import { trackInflight } from '../inflight.js'
+import { sendAllChunksOrMark } from '../chunked-send.js'
 import type { WhatsAppMessage, WhatsAppSendReply, WhatsAppSendTyping } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -68,9 +69,11 @@ async function handleWhatsAppMessageInner(
       return
     }
     const replyText = result.text ?? '(no output)'
-    for (const chunk of splitMessage(replyText, MAX_MESSAGE_LENGTH)) {
-      await send(jid, chunk)
-    }
+    await sendAllChunksOrMark(
+      splitMessage(replyText, MAX_MESSAGE_LENGTH),
+      (text) => send(jid, text),
+      log,
+    )
   } catch (err) {
     log.error({ err }, 'whatsapp send failed')
   } finally {
