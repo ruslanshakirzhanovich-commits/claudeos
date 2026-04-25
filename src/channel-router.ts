@@ -1,24 +1,16 @@
 import { sendToChat as sendToTelegram } from './bot.js'
 import { sendToDiscordUser } from './discord/index.js'
 import { sendToWhatsAppJid } from './whatsapp/index.js'
+import { classifyChatId, type ChannelKind } from './channel.js'
 
-// We store Telegram, Discord, and WhatsApp chats in the same TEXT column.
-// The scheduler (and anything else that speaks "chatId") needs to know which
-// transport owns each id. Format conventions are channel-native so a raw
-// chat_id is self-classifying:
+// Format conventions are channel-native so a raw chat_id is self-classifying:
 //   Telegram  → signed decimal integer      "110440505", "-1001234"
 //   Discord   → "discord:<userSnowflake>"   "discord:110440505123"
 //   WhatsApp  → "<number>@s.whatsapp.net"   "491234567@s.whatsapp.net"
+// classifyChatId lives in ./channel.js so transport-free callers can use it.
+
+export { classifyChatId, type ChannelKind }
 const DISCORD_PREFIX = 'discord:'
-
-export type ChannelKind = 'telegram' | 'discord' | 'whatsapp' | 'unknown'
-
-export function classifyChatId(chatId: string): ChannelKind {
-  if (chatId.startsWith(DISCORD_PREFIX)) return 'discord'
-  if (chatId.includes('@')) return 'whatsapp'
-  if (/^-?\d+$/.test(chatId)) return 'telegram'
-  return 'unknown'
-}
 
 export interface ChannelSenders {
   telegram: (chatId: string, text: string) => Promise<void>
