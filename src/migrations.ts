@@ -1,13 +1,22 @@
 import crypto from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { logger } from './logger.js'
-import {
-  ADMIN_CHAT_IDS,
-  ALLOWED_DISCORD_USERS,
-  ADMIN_DISCORD_USERS,
-  ALLOWED_WHATSAPP_NUMBERS,
-  ADMIN_WHATSAPP_NUMBERS,
-} from './config.js'
+
+export interface MigrationSeeds {
+  // Telegram chat ids (numeric strings) — admin allowlist; allowed_chats is
+  // read directly from the legacy table inside the migration.
+  adminTelegram?: readonly string[]
+  // Discord raw user ids (without 'discord:' prefix)
+  allowedDiscord?: readonly string[]
+  adminDiscord?: readonly string[]
+  // WhatsApp bare numbers or full JIDs
+  allowedWhatsapp?: readonly string[]
+  adminWhatsapp?: readonly string[]
+}
+
+// Set just before runMigrations and read by v8.up(). Module-level so the
+// existing Migration interface stays unchanged. runMigrations resets it.
+let pendingSeeds: MigrationSeeds = {}
 
 export interface Migration {
   version: number
@@ -253,7 +262,7 @@ export const MIGRATIONS: Migration[] = [
       }
 
       // 2. Seed Discord from env
-      for (const raw of ALLOWED_DISCORD_USERS) {
+      for (const raw of pendingSeeds.allowedDiscord ?? []) {
         const chatId = `discord:${raw}`
         if (chatExists(chatId)) continue
         const userId = ensureUser(chatId, now)
@@ -264,7 +273,7 @@ export const MIGRATIONS: Migration[] = [
       }
 
       // 3. Seed WhatsApp from env
-      for (const raw of ALLOWED_WHATSAPP_NUMBERS) {
+      for (const raw of pendingSeeds.allowedWhatsapp ?? []) {
         const chatId = raw.includes('@') ? raw : `${raw}@s.whatsapp.net`
         if (chatExists(chatId)) continue
         const userId = ensureUser(chatId, now)
@@ -281,9 +290,9 @@ export const MIGRATIONS: Migration[] = [
            WHERE user_id = (SELECT user_id FROM user_chats WHERE chat_id = ?)`,
         ).run(chatId)
       }
-      for (const id of ADMIN_CHAT_IDS) setAdminByChatId(id)
-      for (const id of ADMIN_DISCORD_USERS) setAdminByChatId(`discord:${id}`)
-      for (const raw of ADMIN_WHATSAPP_NUMBERS) {
+      for (const id of pendingSeeds.adminTelegram ?? []) setAdminByChatId(id)
+      for (const id of pendingSeeds.adminDiscord ?? []) setAdminByChatId(`discord:${id}`)
+      for (const raw of pendingSeeds.adminWhatsapp ?? []) {
         setAdminByChatId(raw.includes('@') ? raw : `${raw}@s.whatsapp.net`)
       }
 
@@ -310,11 +319,16 @@ export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): numb
   return row
 }
 
-export function runMigrations(db: InstanceType<typeof Database>): void {
+export function runMigrations(
+  db: InstanceType<typeof Database>,
+  seeds: MigrationSeeds = {},
+): void {
+  pendingSeeds = seeds
   const current = getCurrentSchemaVersion(db)
   const target = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0
   if (current > target) {
     logger.warn({ current, target }, 'DB schema is newer than code knows about — continuing anyway')
+    pendingSeeds = {}
     return
   }
 
@@ -330,7 +344,9 @@ export function runMigrations(db: InstanceType<typeof Database>): void {
       logger.info({ version: m.version }, 'migration applied')
     } catch (err) {
       logger.error({ err, version: m.version, name: m.name }, 'migration failed')
+      pendingSeeds = {}
       throw err
     }
   }
+  pendingSeeds = {}
 }

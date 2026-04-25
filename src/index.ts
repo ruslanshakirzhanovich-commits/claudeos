@@ -6,8 +6,11 @@ import {
   STORE_DIR,
   TELEGRAM_BOT_TOKEN,
   DECAY_INTERVAL_MS,
-  ALLOWED_CHAT_IDS,
   ADMIN_CHAT_IDS,
+  ALLOWED_DISCORD_USERS,
+  ADMIN_DISCORD_USERS,
+  ALLOWED_WHATSAPP_NUMBERS,
+  ADMIN_WHATSAPP_NUMBERS,
   PREVIEW_ENABLED,
   PREVIEW_PORT,
   BACKUP_SCHEDULE_ENABLED,
@@ -24,13 +27,7 @@ import {
   WHATSAPP_ENABLED,
   DISCORD_ENABLED,
 } from './config.js'
-import {
-  initDatabase,
-  seedAllowedChatsFromEnv,
-  isOpenMode,
-  closeDb,
-  getSchemaVersion,
-} from './db.js'
+import { initDatabase, isOpenMode, closeDb, getSchemaVersion } from './db.js'
 import { startHealthServer, type HealthServer } from './health.js'
 import { BOT_VERSION } from './version.js'
 import { createPreviewServer, cleanupOldPreviews } from './preview-server.js'
@@ -123,14 +120,20 @@ async function main(): Promise<void> {
   }
 
   acquireLock()
-  initDatabase()
-  const seeded = seedAllowedChatsFromEnv(ALLOWED_CHAT_IDS)
-  if (seeded > 0) logger.info({ seeded }, 'seeded allowed_chats from ALLOWED_CHAT_IDS env')
+  // Pass env-driven seed lists into the v8 migration. Subsequent boots
+  // (after v8 is applied) ignore them — DB is the source of truth.
+  initDatabase({
+    adminTelegram: ADMIN_CHAT_IDS,
+    allowedDiscord: ALLOWED_DISCORD_USERS,
+    adminDiscord: ADMIN_DISCORD_USERS,
+    allowedWhatsapp: ALLOWED_WHATSAPP_NUMBERS,
+    adminWhatsapp: ADMIN_WHATSAPP_NUMBERS,
+  })
 
   if (isOpenMode()) {
     logger.warn(
-      '⚠️  OPEN MODE: allowed_chats is empty and ALLOWED_CHAT_IDS env is unset — ' +
-        'the bot will accept messages from ANY Telegram chat. Intended only for ' +
+      '⚠️  OPEN MODE: users table is empty — the bot will accept the first ' +
+        'message from any chat (auto-promoted to admin). Intended only for ' +
         'first-run bootstrap. Set ALLOWED_CHAT_IDS in .env or use /adduser to close the door.',
     )
   }

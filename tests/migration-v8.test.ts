@@ -10,19 +10,15 @@ vi.mock('../src/logger.js', () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }))
 
-// Single mock for the whole file: tests that need different env shapes use
-// separate freshDb() instances and seed the legacy allowed_chats table by
-// hand. Only the empty-env case can't be mocked here without a remock.
-vi.mock('../src/config.js', () => ({
-  ALLOWED_CHAT_IDS: ['111', '222'],
-  ADMIN_CHAT_IDS: ['111'],
-  ALLOWED_DISCORD_USERS: ['d-aaa'],
-  ADMIN_DISCORD_USERS: [],
-  ALLOWED_WHATSAPP_NUMBERS: ['15551234567'],
-  ADMIN_WHATSAPP_NUMBERS: [],
-}))
-
 const { runMigrations, MIGRATIONS } = await import('../src/migrations.js')
+
+const SEEDS = {
+  adminTelegram: ['111'],
+  allowedDiscord: ['d-aaa'],
+  adminDiscord: [],
+  allowedWhatsapp: ['15551234567'],
+  adminWhatsapp: [],
+}
 
 afterAll(() => {
   try {
@@ -70,7 +66,7 @@ describe('migration v8', () => {
          VALUES (?, ?, ?, ?, ?)`,
       ).run('222', now, 'env', null, null)
 
-      runMigrations(db)
+      runMigrations(db, SEEDS)
 
       const users = db.prepare('SELECT user_id, display_name, is_admin FROM users ORDER BY created_at').all() as Array<{
         user_id: string
@@ -108,7 +104,7 @@ describe('migration v8', () => {
     try {
       runUpToV7(db)
       // No allowed_chats seeded — only the env-discord and env-whatsapp users.
-      runMigrations(db)
+      runMigrations(db, SEEDS)
 
       const adminCount = (
         db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').get() as { c: number }
@@ -134,12 +130,12 @@ describe('migration v8', () => {
     const db = freshDb('idempotent.db')
     try {
       runUpToV7(db)
-      runMigrations(db)
+      runMigrations(db, SEEDS)
       const before = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c
       expect(before).toBeGreaterThan(0)
 
       db.pragma('user_version = 7')
-      runMigrations(db)
+      runMigrations(db, SEEDS)
       const after = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c
       expect(after).toBe(before) // no duplicates from second run
     } finally {
@@ -160,7 +156,7 @@ describe('migration v8', () => {
          VALUES (?, ?, ?, ?, ?)`,
       ).run('222', now - 5000, 'env', null, null)
 
-      runMigrations(db)
+      runMigrations(db, SEEDS)
 
       // 222 is the oldest (created_at = now-5000; discord/whatsapp seeds are at
       // now or now+ε). It should be the bootstrap admin.

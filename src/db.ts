@@ -2,7 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { DB_PATH, STORE_DIR } from './config.js'
-import { runMigrations, getCurrentSchemaVersion } from './migrations.js'
+import {
+  runMigrations,
+  getCurrentSchemaVersion,
+  type MigrationSeeds,
+} from './migrations.js'
+import * as users from './users.js'
 
 const BetterSqlite3 = (Database as any).default ?? Database
 
@@ -17,9 +22,9 @@ export function getDb(): InstanceType<typeof Database> {
   return _db!
 }
 
-export function initDatabase(): void {
+export function initDatabase(seeds: MigrationSeeds = {}): void {
   const db = getDb()
-  runMigrations(db)
+  runMigrations(db, seeds)
 }
 
 /**
@@ -51,26 +56,25 @@ export interface AllowedChatRow {
 }
 
 export function touchAllowedChat(chatId: string): void {
-  getDb()
-    .prepare('UPDATE allowed_chats SET last_seen_at = ? WHERE chat_id = ?')
-    .run(Date.now(), chatId)
+  users.touchUserChat(chatId)
 }
 
 export function listAllowedChats(): AllowedChatRow[] {
   return getDb()
-    .prepare('SELECT * FROM allowed_chats ORDER BY added_at ASC')
+    .prepare(
+      `SELECT chat_id, added_at, added_by, note, last_seen_at
+       FROM user_chats
+       ORDER BY added_at ASC`,
+    )
     .all() as AllowedChatRow[]
 }
 
 export function isChatAllowed(chatId: string): boolean {
-  const row = getDb().prepare('SELECT 1 AS ok FROM allowed_chats WHERE chat_id = ?').get(chatId) as
-    | { ok: number }
-    | undefined
-  return Boolean(row)
+  return users.getUserByChat(chatId) !== null
 }
 
 export function countAllowedChats(): number {
-  const row = getDb().prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }
+  const row = getDb().prepare('SELECT COUNT(*) AS c FROM user_chats').get() as { c: number }
   return row.c
 }
 
@@ -92,14 +96,14 @@ export function addAllowedChat(
   if (!isValidTelegramChatId(chatId)) {
     throw new Error(`addAllowedChat: not a Telegram chat id: ${chatId.slice(0, 80)}`)
   }
-  const info = getDb()
-    .prepare(
-      `INSERT INTO allowed_chats (chat_id, added_at, added_by, note)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(chat_id) DO NOTHING`,
-    )
-    .run(chatId, Date.now(), addedBy, note)
-  return info.changes > 0
+  if (isChatAllowed(chatId)) return false
+  users.addUserChat({
+    chatId,
+    channel: 'telegram',
+    addedBy: addedBy ?? undefined,
+    note: note ?? undefined,
+  })
+  return true
 }
 
 export interface RemoveChatResult {
@@ -111,41 +115,22 @@ export interface RemoveChatResult {
 }
 
 export function removeAllowedChat(chatId: string): RemoveChatResult {
-  const db = getDb()
-  const tx = db.transaction((id: string): RemoveChatResult => {
-    const allowed = db.prepare('DELETE FROM allowed_chats WHERE chat_id = ?').run(id)
-    const prefs = db.prepare('DELETE FROM chat_preferences WHERE chat_id = ?').run(id)
-    const session = db.prepare('DELETE FROM sessions WHERE chat_id = ?').run(id)
-    const memories = db.prepare('DELETE FROM memories WHERE chat_id = ?').run(id)
-    const tasks = db.prepare('DELETE FROM scheduled_tasks WHERE chat_id = ?').run(id)
-    return {
-      removed: Number(allowed.changes) > 0,
-      memoriesDeleted: Number(memories.changes),
-      tasksDeleted: Number(tasks.changes),
-      sessionCleared: Number(session.changes) > 0,
-      preferencesCleared: Number(prefs.changes) > 0,
-    }
-  })
-  return tx(chatId)
-}
-
-export function seedAllowedChatsFromEnv(chatIds: readonly string[]): number {
-  if (countAllowedChats() > 0) return 0
-  let seeded = 0
-  for (const id of chatIds) {
-    if (!isValidTelegramChatId(id)) continue
-    if (addAllowedChat(id, 'env', 'seeded from ALLOWED_CHAT_IDS')) seeded++
+  const r = users.removeUserChat(chatId)
+  return {
+    removed: r.removed,
+    memoriesDeleted: r.memoriesDeleted,
+    tasksDeleted: r.tasksDeleted,
+    sessionCleared: r.sessionCleared,
+    preferencesCleared: r.preferencesCleared,
   }
-  return seeded
 }
 
 export function isAuthorised(chatId: number | string): boolean {
-  if (countAllowedChats() === 0) return true
-  return isChatAllowed(String(chatId))
+  return users.isAuthorisedChat(String(chatId))
 }
 
 export function isOpenMode(): boolean {
-  return countAllowedChats() === 0
+  return users.isOpenMode()
 }
 
 // SQLite's VACUUM INTO does not support parameter binding for the target
@@ -203,8 +188,18 @@ export function verifyBackup(backupPath: string): BackupVerification {
     const schemaVersion = handle.pragma('user_version', { simple: true }) as number
     const sessions = (handle.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c
     const memories = (handle.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
+    // Prefer user_chats (v8+) over the legacy allowed_chats table.
+    const hasUserChats = Boolean(
+      handle
+        .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_chats'`)
+        .get(),
+    )
     const allowedChats = (
-      handle.prepare('SELECT COUNT(*) AS c FROM allowed_chats').get() as { c: number }
+      handle
+        .prepare(
+          `SELECT COUNT(*) AS c FROM ${hasUserChats ? 'user_chats' : 'allowed_chats'}`,
+        )
+        .get() as { c: number }
     ).c
     return { schemaVersion, sessions, memories, allowedChats }
   } finally {
@@ -227,7 +222,7 @@ export function getBotStats(): BotStats {
   const row = db
     .prepare(
       `SELECT
-         (SELECT COUNT(*) FROM allowed_chats)                                AS allowed,
+         (SELECT COUNT(*) FROM user_chats)                                   AS allowed,
          (SELECT COUNT(*) FROM memories)                                     AS mem_total,
          (SELECT COUNT(*) FROM memories WHERE created_at > ?)                AS mem_recent,
          (SELECT COUNT(DISTINCT chat_id) FROM memories)                      AS unique_chats,

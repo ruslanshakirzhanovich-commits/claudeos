@@ -32,6 +32,8 @@ initDatabase()
 function clearAll(): void {
   const db = getDb()
   db.exec('DELETE FROM memories')
+  db.exec('DELETE FROM user_chats')
+  db.exec('DELETE FROM users')
   db.exec('DELETE FROM allowed_chats')
   db.exec('DELETE FROM sessions')
 }
@@ -90,7 +92,7 @@ describe('backup → restore → verify roundtrip', () => {
       ])
 
       const allowed = restored
-        .prepare(`SELECT chat_id FROM allowed_chats ORDER BY chat_id`)
+        .prepare(`SELECT chat_id FROM user_chats ORDER BY chat_id`)
         .all() as Array<{ chat_id: string }>
       expect(allowed.map((r) => r.chat_id)).toEqual(['123'])
 

@@ -20,8 +20,6 @@ const {
   addAllowedChat,
   isValidTelegramChatId,
   isChatAllowed,
-  seedAllowedChatsFromEnv,
-  countAllowedChats,
 } = await import('../src/db.js')
 
 initDatabase()
@@ -65,17 +63,6 @@ describe('addAllowedChat input validation', () => {
   })
 })
 
-describe('seedAllowedChatsFromEnv silently skips invalid ids', () => {
-  it('seeds only the well-formed entries', () => {
-    // start clean: countAllowedChats may be >0 due to prior tests, so use a
-    // fresh DB context isn't possible here. seedAllowedChatsFromEnv early-exits
-    // if the table already has rows, so we expect 0 in that case — but the
-    // important invariant is that no jid leaks into the table.
-    const before = countAllowedChats()
-    seedAllowedChatsFromEnv(['15551234567@s.whatsapp.net', '888777'])
-    if (before === 0) {
-      expect(isChatAllowed('888777')).toBe(true)
-    }
-    expect(isChatAllowed('15551234567@s.whatsapp.net')).toBe(false)
-  })
-})
+// seedAllowedChatsFromEnv was removed in v8 — env seeds run inside the
+// migration now. The Telegram-only invariant for runtime addAllowedChat is
+// covered by the test above.
