@@ -39,6 +39,7 @@ import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
 import { trackInflight } from './inflight.js'
 import { sendAllChunksOrMark } from './chunked-send.js'
+import { addUserChat } from './users.js'
 import { wrapUntrusted } from './untrusted.js'
 import { resetUsage } from './usage.js'
 import { rateLimitMessage } from './rate-limit.js'
@@ -119,7 +120,18 @@ async function handleMessageInner(
     return
   }
 
-  if (isOpenMode()) warnOpenModeOnce(chatId, userId, username, log)
+  if (isOpenMode()) {
+    warnOpenModeOnce(chatId, userId, username, log)
+    // Auto-add the first incoming chat as a new user (auto-promotes to admin
+    // because users table is empty in open mode). Subsequent messages from
+    // *other* chats will be rejected by isAuthorised above.
+    addUserChat({
+      chatId,
+      channel: 'telegram',
+      addedBy: 'open-mode',
+      note: `auto-added from ${username ?? 'unknown'}`,
+    })
+  }
 
   touchAllowedChat(chatId)
   const memoryText = opts.memoryText ?? agentInput

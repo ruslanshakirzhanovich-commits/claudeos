@@ -27,6 +27,11 @@ vi.mock('../src/chat-pipeline.js', () => ({
   runChatPipeline: (input: any) => pipelineMock(input),
 }))
 
+vi.mock('../src/users.js', () => ({
+  isOpenMode: () => false,
+  addUserChat: () => ({ userId: 'u_stub', created: false }),
+}))
+
 const { handleDiscordMessage } = await import('../src/discord/handler.js')
 const { handleWhatsAppMessage } = await import('../src/whatsapp/handler.js')
 const { inflightCount } = await import('../src/inflight.js')

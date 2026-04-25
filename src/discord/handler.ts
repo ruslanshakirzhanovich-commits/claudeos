@@ -6,6 +6,7 @@ import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
 import { trackInflight } from '../inflight.js'
 import { sendAllChunksOrMark } from '../chunked-send.js'
+import { isOpenMode, addUserChat } from '../users.js'
 import type { DiscordIncomingMessage, DiscordSendReply, DiscordSendTyping } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
@@ -44,6 +45,16 @@ async function handleDiscordMessageInner(
   }
 
   const chatId = chatIdForDiscordUser(msg.userId)
+  // Open-mode auto-add: same behaviour as Telegram's handleMessage.
+  if (isOpenMode()) {
+    log.warn({ author: msg.authorTag }, 'OPEN MODE accepted new discord chat')
+    addUserChat({
+      chatId,
+      channel: 'discord',
+      addedBy: 'open-mode',
+      note: `auto-added from ${msg.authorTag}`,
+    })
+  }
   log.info({ preview: msg.text.slice(0, 80) }, 'message received')
 
   // Discord's typing indicator lasts ~10s. Refresh on the same cadence as

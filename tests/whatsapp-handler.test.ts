@@ -37,6 +37,11 @@ vi.mock('../src/memory.js', () => ({
   saveConversationTurn: async () => {},
 }))
 
+vi.mock('../src/users.js', () => ({
+  isOpenMode: () => false,
+  addUserChat: () => ({ userId: 'u_stub', created: false }),
+}))
+
 vi.mock('../src/logger.js', () => {
   const noop = () => {}
   const log = { info: noop, warn: noop, error: noop, debug: noop, child: () => log }

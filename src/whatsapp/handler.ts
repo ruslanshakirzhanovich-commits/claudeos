@@ -11,6 +11,7 @@ import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
 import { trackInflight } from '../inflight.js'
 import { sendAllChunksOrMark } from '../chunked-send.js'
+import { isOpenMode, addUserChat } from '../users.js'
 import type { WhatsAppMessage, WhatsAppSendReply, WhatsAppSendTyping } from './types.js'
 
 export async function handleWhatsAppMessage(
@@ -38,6 +39,16 @@ async function handleWhatsAppMessageInner(
   if (!isWhatsAppAuthorised(number)) {
     log.warn({ number }, 'unauthorised whatsapp sender')
     return
+  }
+
+  if (isOpenMode()) {
+    log.warn({ number }, 'OPEN MODE accepted new whatsapp chat')
+    addUserChat({
+      chatId: jid,
+      channel: 'whatsapp',
+      addedBy: 'open-mode',
+      note: `auto-added from ${number}`,
+    })
   }
 
   log.info({ preview: text.slice(0, 80) }, 'message received')
