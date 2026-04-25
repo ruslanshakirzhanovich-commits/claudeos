@@ -1,6 +1,8 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readEnvFile } from './env.js'
+import * as users from './users.js'
+import { discordChatId, whatsappChatId } from './channel.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -44,13 +46,8 @@ export const ADMIN_CHAT_IDS: readonly string[] = rawAdmin
       .filter(Boolean)
   : ALLOWED_CHAT_IDS.slice(0, 1)
 
-export function isAdminOf(admins: readonly string[], chatId: number | string): boolean {
-  if (admins.length === 0) return false
-  return admins.includes(String(chatId))
-}
-
 export function isAdmin(chatId: number | string): boolean {
-  return isAdminOf(ADMIN_CHAT_IDS, chatId)
+  return users.isAdminChat(String(chatId))
 }
 
 export const CLAUDE_MODEL = (env['CLAUDE_MODEL'] ?? '').trim()
@@ -180,32 +177,21 @@ export const ALLOWED_DISCORD_USERS: readonly string[] = rawDiscord
   .map((s) => s.trim())
   .filter(Boolean)
 
-export function isDiscordUserAuthorisedOf(allowed: readonly string[], userId: string): boolean {
-  if (allowed.length === 0) return true
-  return allowed.includes(userId)
-}
-
 export function isDiscordUserAuthorised(userId: string): boolean {
-  return isDiscordUserAuthorisedOf(ALLOWED_DISCORD_USERS, userId)
+  return users.isAuthorisedChat(discordChatId(userId))
 }
 
-// Discord admin list. Unlike ADMIN_CHAT_IDS (Telegram), there is no
-// fall-back to the allowlist: Discord allowlist runs in open mode when
-// empty, and auto-promoting strangers to bypassPermissions is a
-// footgun. Empty = nobody is an admin, everyone stays in plan mode.
+// First-boot seed only. Migration v8 reads this once to populate
+// users + user_chats. After v8, the database is the source of truth —
+// this env var has no effect on runtime auth.
 const rawAdminDiscord = env['ADMIN_DISCORD_USERS'] ?? ''
 export const ADMIN_DISCORD_USERS: readonly string[] = rawAdminDiscord
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 
-export function isDiscordUserAdminOf(admins: readonly string[], userId: string): boolean {
-  if (admins.length === 0) return false
-  return admins.includes(userId)
-}
-
 export function isDiscordUserAdmin(userId: string): boolean {
-  return isDiscordUserAdminOf(ADMIN_DISCORD_USERS, userId)
+  return users.isAdminChat(discordChatId(userId))
 }
 
 export const WHATSAPP_META_ACCESS_TOKEN = env['WHATSAPP_META_ACCESS_TOKEN'] ?? ''
@@ -234,13 +220,8 @@ export const ALLOWED_WHATSAPP_NUMBERS: readonly string[] = rawWhatsapp
   .map((s) => s.trim())
   .filter(Boolean)
 
-export function isWhatsAppAuthorisedOf(allowed: readonly string[], number: string): boolean {
-  if (allowed.length === 0) return true
-  return allowed.includes(number)
-}
-
 export function isWhatsAppAuthorised(number: string): boolean {
-  return isWhatsAppAuthorisedOf(ALLOWED_WHATSAPP_NUMBERS, number)
+  return users.isAuthorisedChat(whatsappChatId(number))
 }
 
 // WhatsApp admin list. Same shape as the Discord one — no fallback to
@@ -251,11 +232,7 @@ export const ADMIN_WHATSAPP_NUMBERS: readonly string[] = rawAdminWhatsApp
   .map((s) => s.trim())
   .filter(Boolean)
 
-export function isWhatsAppNumberAdminOf(admins: readonly string[], number: string): boolean {
-  if (admins.length === 0) return false
-  return admins.includes(number)
-}
 
 export function isWhatsAppNumberAdmin(number: string): boolean {
-  return isWhatsAppNumberAdminOf(ADMIN_WHATSAPP_NUMBERS, number)
+  return users.isAdminChat(whatsappChatId(number))
 }
