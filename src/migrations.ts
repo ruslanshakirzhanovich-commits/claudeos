@@ -1,5 +1,13 @@
+import crypto from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { logger } from './logger.js'
+import {
+  ADMIN_CHAT_IDS,
+  ALLOWED_DISCORD_USERS,
+  ADMIN_DISCORD_USERS,
+  ALLOWED_WHATSAPP_NUMBERS,
+  ADMIN_WHATSAPP_NUMBERS,
+} from './config.js'
 
 export interface Migration {
   version: number
@@ -201,7 +209,98 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_user_chats_user
           ON user_chats(user_id);
       `)
-      // Data move comes in Task 4, after src/users.ts exists.
+
+      const now = Date.now()
+
+      function generateUserId(): string {
+        // Inline 8-hex generator; matches src/users.ts shape but is duplicated
+        // here to avoid importing users.ts (which would cycle through db.ts).
+        return 'u_' + crypto.randomBytes(4).toString('hex')
+      }
+
+      function ensureUser(displayName: string, createdAt: number): string {
+        const userId = generateUserId()
+        db.prepare(
+          `INSERT INTO users (user_id, display_name, is_admin, created_at)
+           VALUES (?, ?, 0, ?)`,
+        ).run(userId, displayName, createdAt)
+        return userId
+      }
+
+      function chatExists(chatId: string): boolean {
+        return Boolean(db.prepare('SELECT 1 FROM user_chats WHERE chat_id = ?').get(chatId))
+      }
+
+      // 1. Migrate allowed_chats → telegram users
+      const legacy = db
+        .prepare(
+          `SELECT chat_id, added_at, added_by, note, last_seen_at FROM allowed_chats`,
+        )
+        .all() as Array<{
+        chat_id: string
+        added_at: number
+        added_by: string | null
+        note: string | null
+        last_seen_at: number | null
+      }>
+      for (const r of legacy) {
+        if (chatExists(r.chat_id)) continue
+        const userId = ensureUser(r.chat_id, r.added_at)
+        db.prepare(
+          `INSERT INTO user_chats (chat_id, user_id, channel, added_at, added_by, note, last_seen_at)
+           VALUES (?, ?, 'telegram', ?, ?, ?, ?)`,
+        ).run(r.chat_id, userId, r.added_at, r.added_by, r.note, r.last_seen_at)
+      }
+
+      // 2. Seed Discord from env
+      for (const raw of ALLOWED_DISCORD_USERS) {
+        const chatId = `discord:${raw}`
+        if (chatExists(chatId)) continue
+        const userId = ensureUser(chatId, now)
+        db.prepare(
+          `INSERT INTO user_chats (chat_id, user_id, channel, added_at, added_by, note)
+           VALUES (?, ?, 'discord', ?, 'env', 'seeded from ALLOWED_DISCORD_USERS')`,
+        ).run(chatId, userId, now)
+      }
+
+      // 3. Seed WhatsApp from env
+      for (const raw of ALLOWED_WHATSAPP_NUMBERS) {
+        const chatId = raw.includes('@') ? raw : `${raw}@s.whatsapp.net`
+        if (chatExists(chatId)) continue
+        const userId = ensureUser(chatId, now)
+        db.prepare(
+          `INSERT INTO user_chats (chat_id, user_id, channel, added_at, added_by, note)
+           VALUES (?, ?, 'whatsapp', ?, 'env', 'seeded from ALLOWED_WHATSAPP_NUMBERS')`,
+        ).run(chatId, userId, now)
+      }
+
+      // 4. Apply admin flags from envs
+      function setAdminByChatId(chatId: string): void {
+        db.prepare(
+          `UPDATE users SET is_admin = 1
+           WHERE user_id = (SELECT user_id FROM user_chats WHERE chat_id = ?)`,
+        ).run(chatId)
+      }
+      for (const id of ADMIN_CHAT_IDS) setAdminByChatId(id)
+      for (const id of ADMIN_DISCORD_USERS) setAdminByChatId(`discord:${id}`)
+      for (const raw of ADMIN_WHATSAPP_NUMBERS) {
+        setAdminByChatId(raw.includes('@') ? raw : `${raw}@s.whatsapp.net`)
+      }
+
+      // 5. Bootstrap admin fallback: if there are users but none is admin,
+      // promote the oldest (smallest created_at).
+      const adminCount = (
+        db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').get() as { c: number }
+      ).c
+      const userCount = (
+        db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }
+      ).c
+      if (adminCount === 0 && userCount > 0) {
+        db.prepare(
+          `UPDATE users SET is_admin = 1
+           WHERE user_id = (SELECT user_id FROM users ORDER BY created_at ASC LIMIT 1)`,
+        ).run()
+      }
     },
   },
 ]
