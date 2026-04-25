@@ -69,8 +69,7 @@ export function initBackupSchedule(intervalHours: number, keep: number): NodeJS.
       const result = createAndVerifyBackup()
       const rotation = rotateBackups(keep)
       recordEvent('backup_ok')
-      const logFn =
-        rotation.failed > 0 ? logger.warn.bind(logger) : logger.info.bind(logger)
+      const logFn = rotation.failed > 0 ? logger.warn.bind(logger) : logger.info.bind(logger)
       logFn(
         {
           path: result.path,

@@ -15,10 +15,7 @@ export async function sendAllChunksOrMark(
         log,
       })
     } catch (err) {
-      log.error(
-        { err, sentChunks: i, totalChunks: chunks.length },
-        'send failed mid-chunk',
-      )
+      log.error({ err, sentChunks: i, totalChunks: chunks.length }, 'send failed mid-chunk')
       try {
         await send(`[…truncated: ${chunks.length - i} chunk(s) lost]`)
       } catch {

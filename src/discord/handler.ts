@@ -77,11 +77,7 @@ async function handleDiscordMessageInner(
       return
     }
     const replyText = result.text ?? '(no output)'
-    await sendAllChunksOrMark(
-      chunkForDiscord(replyText),
-      (text) => send(msg.channelId, text),
-      log,
-    )
+    await sendAllChunksOrMark(chunkForDiscord(replyText), (text) => send(msg.channelId, text), log)
   } catch (err) {
     log.error({ err }, 'discord send failed')
   } finally {
