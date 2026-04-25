@@ -4,6 +4,7 @@ import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
 import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
+import { trackInflight } from '../inflight.js'
 import type { DiscordIncomingMessage, DiscordSendReply, DiscordSendTyping } from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
@@ -18,6 +19,14 @@ export function chunkForDiscord(text: string, limit: number = DISCORD_MESSAGE_LI
 }
 
 export async function handleDiscordMessage(
+  msg: DiscordIncomingMessage,
+  send: DiscordSendReply,
+  sendTyping?: DiscordSendTyping,
+): Promise<void> {
+  return trackInflight(handleDiscordMessageInner(msg, send, sendTyping))
+}
+
+async function handleDiscordMessageInner(
   msg: DiscordIncomingMessage,
   send: DiscordSendReply,
   sendTyping?: DiscordSendTyping,

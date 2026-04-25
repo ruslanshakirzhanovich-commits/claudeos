@@ -37,6 +37,7 @@ import {
 } from './media.js'
 import { logger } from './logger.js'
 import { withRetry, isTransientError } from './retry.js'
+import { trackInflight } from './inflight.js'
 import { wrapUntrusted } from './untrusted.js'
 import { resetUsage } from './usage.js'
 import { rateLimitMessage } from './rate-limit.js'
@@ -94,6 +95,14 @@ function ctxIdentity(ctx: Context): {
 }
 
 async function handleMessage(
+  ctx: Context,
+  agentInput: string,
+  opts: { forceVoice?: boolean; memoryText?: string } = {},
+): Promise<void> {
+  return trackInflight(handleMessageInner(ctx, agentInput, opts))
+}
+
+async function handleMessageInner(
   ctx: Context,
   agentInput: string,
   opts: { forceVoice?: boolean; memoryText?: string } = {},

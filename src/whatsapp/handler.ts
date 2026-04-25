@@ -9,9 +9,18 @@ import { wrapUntrusted } from '../untrusted.js'
 import { splitMessage } from '../format.js'
 import { rateLimitMessage } from '../rate-limit.js'
 import { runChatPipeline } from '../chat-pipeline.js'
+import { trackInflight } from '../inflight.js'
 import type { WhatsAppMessage, WhatsAppSendReply, WhatsAppSendTyping } from './types.js'
 
 export async function handleWhatsAppMessage(
+  msg: WhatsAppMessage,
+  send: WhatsAppSendReply,
+  sendTyping?: WhatsAppSendTyping,
+): Promise<void> {
+  return trackInflight(handleWhatsAppMessageInner(msg, send, sendTyping))
+}
+
+async function handleWhatsAppMessageInner(
   msg: WhatsAppMessage,
   send: WhatsAppSendReply,
   sendTyping?: WhatsAppSendTyping,

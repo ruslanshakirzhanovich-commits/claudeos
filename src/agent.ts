@@ -8,7 +8,6 @@ import {
   AGENT_STREAM_TIMEOUT_MS,
 } from './config.js'
 import { logger, type Logger } from './logger.js'
-import { trackInflight } from './inflight.js'
 import { recordEvent } from './metrics.js'
 import { effortToThinkingTokens, isEffortLevel } from './effort.js'
 import { recordUsage, recordCompaction } from './usage.js'
@@ -62,15 +61,13 @@ export async function runAgent(message: string, opts: RunAgentOptions): Promise<
       streamStarted = true
     })
   }
-  return trackInflight(
-    withRetry(attempt, {
-      attempts: AGENT_RETRY_ATTEMPTS,
-      baseMs: AGENT_RETRY_BASE_MS,
-      label: 'runAgent',
-      log: opts.log ?? logger,
-      shouldRetry: (err) => !streamStarted && isTransientError(err),
-    }),
-  )
+  return withRetry(attempt, {
+    attempts: AGENT_RETRY_ATTEMPTS,
+    baseMs: AGENT_RETRY_BASE_MS,
+    label: 'runAgent',
+    log: opts.log ?? logger,
+    shouldRetry: (err) => !streamStarted && isTransientError(err),
+  })
 }
 
 async function runAgentInner(

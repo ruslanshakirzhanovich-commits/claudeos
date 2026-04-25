@@ -6,6 +6,7 @@ import { logger } from './logger.js'
 import { SCHEDULER_POLL_MS } from './config.js'
 import { recordEvent } from './metrics.js'
 import { runSerialPerChat } from './chat-queue.js'
+import { trackInflight } from './inflight.js'
 
 const { parseExpression } = (cronParser as any).default ?? cronParser
 
@@ -86,7 +87,8 @@ function countMissedTicks(
 export async function runDueTasks(send: Sender): Promise<void> {
   const tasks = getDueTasks()
   for (const task of tasks) {
-    await runSerialPerChat(task.chat_id, async () => {
+    await trackInflight(
+      runSerialPerChat(task.chat_id, async () => {
       const now = Date.now()
       const since = task.last_run ?? task.created_at
       const { missed, capped } = countMissedTicks(task.schedule, since, now)
@@ -154,7 +156,8 @@ export async function runDueTasks(send: Sender): Promise<void> {
           /* ignore */
         }
       }
-    })
+    }),
+    )
   }
 }
 
