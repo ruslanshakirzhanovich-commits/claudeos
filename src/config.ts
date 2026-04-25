@@ -232,7 +232,6 @@ export const ADMIN_WHATSAPP_NUMBERS: readonly string[] = rawAdminWhatsApp
   .map((s) => s.trim())
   .filter(Boolean)
 
-
 export function isWhatsAppNumberAdmin(number: string): boolean {
   return users.isAdminChat(whatsappChatId(number))
 }

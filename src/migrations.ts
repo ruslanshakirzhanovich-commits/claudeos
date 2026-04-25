@@ -242,9 +242,7 @@ export const MIGRATIONS: Migration[] = [
 
       // 1. Migrate allowed_chats → telegram users
       const legacy = db
-        .prepare(
-          `SELECT chat_id, added_at, added_by, note, last_seen_at FROM allowed_chats`,
-        )
+        .prepare(`SELECT chat_id, added_at, added_by, note, last_seen_at FROM allowed_chats`)
         .all() as Array<{
         chat_id: string
         added_at: number
@@ -301,9 +299,7 @@ export const MIGRATIONS: Migration[] = [
       const adminCount = (
         db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').get() as { c: number }
       ).c
-      const userCount = (
-        db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }
-      ).c
+      const userCount = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c
       if (adminCount === 0 && userCount > 0) {
         db.prepare(
           `UPDATE users SET is_admin = 1
@@ -319,10 +315,7 @@ export function getCurrentSchemaVersion(db: InstanceType<typeof Database>): numb
   return row
 }
 
-export function runMigrations(
-  db: InstanceType<typeof Database>,
-  seeds: MigrationSeeds = {},
-): void {
+export function runMigrations(db: InstanceType<typeof Database>, seeds: MigrationSeeds = {}): void {
   pendingSeeds = seeds
   const current = getCurrentSchemaVersion(db)
   const target = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0

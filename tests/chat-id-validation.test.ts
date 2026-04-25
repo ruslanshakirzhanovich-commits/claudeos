@@ -14,13 +14,8 @@ vi.mock('../src/logger.js', () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }))
 
-const {
-  initDatabase,
-  closeDb,
-  addAllowedChat,
-  isValidTelegramChatId,
-  isChatAllowed,
-} = await import('../src/db.js')
+const { initDatabase, closeDb, addAllowedChat, isValidTelegramChatId, isChatAllowed } =
+  await import('../src/db.js')
 
 initDatabase()
 

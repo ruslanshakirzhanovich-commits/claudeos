@@ -2,11 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { DB_PATH, STORE_DIR } from './config.js'
-import {
-  runMigrations,
-  getCurrentSchemaVersion,
-  type MigrationSeeds,
-} from './migrations.js'
+import { runMigrations, getCurrentSchemaVersion, type MigrationSeeds } from './migrations.js'
 import * as users from './users.js'
 
 const BetterSqlite3 = (Database as any).default ?? Database
@@ -190,15 +186,11 @@ export function verifyBackup(backupPath: string): BackupVerification {
     const memories = (handle.prepare('SELECT COUNT(*) AS c FROM memories').get() as { c: number }).c
     // Prefer user_chats (v8+) over the legacy allowed_chats table.
     const hasUserChats = Boolean(
-      handle
-        .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_chats'`)
-        .get(),
+      handle.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_chats'`).get(),
     )
     const allowedChats = (
       handle
-        .prepare(
-          `SELECT COUNT(*) AS c FROM ${hasUserChats ? 'user_chats' : 'allowed_chats'}`,
-        )
+        .prepare(`SELECT COUNT(*) AS c FROM ${hasUserChats ? 'user_chats' : 'allowed_chats'}`)
         .get() as { c: number }
     ).c
     return { schemaVersion, sessions, memories, allowedChats }

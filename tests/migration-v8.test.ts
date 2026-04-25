@@ -68,7 +68,9 @@ describe('migration v8', () => {
 
       runMigrations(db, SEEDS)
 
-      const users = db.prepare('SELECT user_id, display_name, is_admin FROM users ORDER BY created_at').all() as Array<{
+      const users = db
+        .prepare('SELECT user_id, display_name, is_admin FROM users ORDER BY created_at')
+        .all() as Array<{
         user_id: string
         display_name: string
         is_admin: number
@@ -79,9 +81,7 @@ describe('migration v8', () => {
         .prepare('SELECT chat_id, channel FROM user_chats ORDER BY chat_id')
         .all() as Array<{ chat_id: string; channel: string }>
       const chatIds = userChats.map((c) => c.chat_id).sort()
-      expect(chatIds).toEqual(
-        ['111', '15551234567@s.whatsapp.net', '222', 'discord:d-aaa'].sort(),
-      )
+      expect(chatIds).toEqual(['111', '15551234567@s.whatsapp.net', '222', 'discord:d-aaa'].sort())
 
       const admin111 = db
         .prepare(
@@ -111,9 +111,7 @@ describe('migration v8', () => {
       ).c
       expect(adminCount).toBe(1)
 
-      const userCount = (
-        db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }
-      ).c
+      const userCount = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c
       expect(userCount).toBe(2) // discord + whatsapp seeds, no telegram
 
       // Oldest user (smallest created_at) is admin

@@ -110,10 +110,9 @@ export function registerUserCommands(bot: Bot): void {
       })
       const verb = r.created ? 'created user' : 'linked to existing user'
       const adminBadge = parsed.isAdmin ? ' [admin]' : ''
-      await ctx.reply(
-        `Added ${parsed.chatId}${adminBadge} — ${verb} <code>${r.userId}</code>`,
-        { parse_mode: 'HTML' },
-      )
+      await ctx.reply(`Added ${parsed.chatId}${adminBadge} — ${verb} <code>${r.userId}</code>`, {
+        parse_mode: 'HTML',
+      })
     } catch (err) {
       await ctx.reply(`Failed: ${(err as Error).message.slice(0, 200)}`)
     }
