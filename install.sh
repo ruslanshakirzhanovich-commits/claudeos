@@ -183,8 +183,8 @@ StandardOutput=append:/home/claw/claudeos/store/claudeclaw.log
 StandardError=append:/home/claw/claudeos/store/claudeclaw.log
 Environment=NODE_ENV=production
 
-# Security
-NoNewPrivileges=true
+# PrivateTmp isolates /tmp. NoNewPrivileges is intentionally omitted:
+# it would block sudo inside the service, breaking the /update deploy flow.
 PrivateTmp=true
 
 [Install]
@@ -195,6 +195,25 @@ systemctl daemon-reload
 systemctl enable claudeclaw.service >/dev/null
 systemctl restart claudeclaw.service
 sleep 2
+
+# ── Step 10b: sudoers for /update deploy ──────────────────────────────────
+SUDOERS_FILE="/etc/sudoers.d/claudeclaw"
+info "Настраиваю sudoers (${SUDOERS_FILE})…"
+cat > /tmp/claudeclaw_sudoers_tmp <<SUDOEOF
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart claudeclaw
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl status claudeclaw *
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl status claudeclaw
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl show claudeclaw *
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl show claudeclaw
+${CLAW_USER} ALL=(root) NOPASSWD: /usr/bin/systemd-run --scope --collect --unit claudeclaw-deploy-* bash ${INSTALL_DIR}/scripts/deploy.sh
+SUDOEOF
+if visudo -cf /tmp/claudeclaw_sudoers_tmp; then
+  install -m 0440 -o root -g root /tmp/claudeclaw_sudoers_tmp "${SUDOERS_FILE}"
+  ok "sudoers настроен: ${SUDOERS_FILE}"
+else
+  warn "visudo не принял файл — пропускаю sudoers. /update не будет работать."
+fi
+rm -f /tmp/claudeclaw_sudoers_tmp
 
 # ── Step 11: final report ──────────────────────────────────────────────────
 echo
