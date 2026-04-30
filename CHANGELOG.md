@@ -2,6 +2,11 @@
 
 Все заметные изменения ClaudeClaw.
 
+## [2.0.0] - 2026-04-30
+- 🔧 `NoNewPrivileges=true` убран из systemd unit: он блокировал `sudo`, что делало `/update` полностью нерабочим. `PrivateTmp=true` сохранён.
+- 🚀 `install.sh` теперь автоматически создаёт `/etc/sudoers.d/claudeclaw` при установке — включая правило для `sudo systemd-run --scope ... deploy.sh`.
+- 🛡 Sudoers обновлён: добавлена строчка для `systemd-run --scope --collect --unit claudeclaw-deploy-*`.
+
 ## [1.5.1] - 2026-04-24
 - 🛠 `/update` перестал самоубиваться посреди деплоя: `deploy.sh` теперь спавнится через `sudo systemd-run --scope --collect --unit=claudeclaw-deploy-<ts>`, попадая в собственный transient scope. `systemctl restart claudeclaw` внутри скрипта больше не прибивает deploy-процесс вместе с ботом.
 - 📒 Deploy-лог переехал из `/tmp/claudeclaw-deploy.log` в `store/deploy.log`. systemd `PrivateTmp=true` больше не прячет лог — его видно с хоста и через новую команду.
