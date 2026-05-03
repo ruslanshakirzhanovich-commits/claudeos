@@ -184,4 +184,68 @@ describe('runAgent — recorded SDK stream e2e', () => {
     expect(result.text).toBeNull()
     expect(result.newSessionId).toBe('sess-cut')
   })
+
+  it('fires onTextDelta for each stream_event text_delta', async () => {
+    querySpy.mockReturnValue(
+      recordedStream([
+        { type: 'system', subtype: 'init', session_id: 'sess-d' },
+        { type: 'stream_event', event: { delta: { type: 'text_delta', text: 'Hello ' } } },
+        { type: 'stream_event', event: { delta: { type: 'text_delta', text: 'world' } } },
+        { type: 'result', result: 'Hello world', session_id: 'sess-d' },
+      ]),
+    )
+
+    const deltas: string[] = []
+    await runAgent('hi', {
+      permissionMode: 'plan',
+      chatId: 'chat-e2e',
+      onTextDelta: (d) => deltas.push(d),
+    })
+    expect(deltas).toEqual(['Hello ', 'world'])
+  })
+
+  it('fires onToolUse for tool_use blocks in assistant events', async () => {
+    querySpy.mockReturnValue(
+      recordedStream([
+        { type: 'system', subtype: 'init', session_id: 'sess-t' },
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', name: 'Bash' }] },
+        },
+        { type: 'result', result: 'done', session_id: 'sess-t' },
+      ]),
+    )
+
+    const tools: string[] = []
+    await runAgent('hi', {
+      permissionMode: 'plan',
+      chatId: 'chat-e2e',
+      onToolUse: (name) => tools.push(name),
+    })
+    expect(tools).toEqual(['Bash'])
+  })
+
+  it('aborts early when external AbortController is aborted', async () => {
+    const externalCtrl = new AbortController()
+    let capturedSignal: AbortSignal | undefined
+    querySpy.mockImplementation((arg: { options?: { abortController?: { signal: AbortSignal } } }) => {
+      capturedSignal = arg?.options?.abortController?.signal
+      return {
+        async *[Symbol.asyncIterator]() {
+          yield { type: 'system', subtype: 'init', session_id: 'sess-ab' }
+          externalCtrl.abort()
+          // Give the event loop a tick so AbortSignal.any() propagates
+          await new Promise((resolve) => setTimeout(resolve, 0))
+          if (capturedSignal?.aborted) {
+            throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+          }
+        },
+      }
+    })
+
+    await expect(
+      runAgent('hi', { permissionMode: 'plan', chatId: 'chat-e2e', abortController: externalCtrl }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(capturedSignal?.aborted).toBe(true)
+  })
 })

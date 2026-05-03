@@ -70,16 +70,17 @@ describe('runAgent SDK guards', () => {
     expect(call.options['maxTurns']).toBe(25)
   })
 
-  it('passes an AbortController so callers can cancel the stream', async () => {
+  it('passes an abortController with a signal so callers can cancel the stream', async () => {
     querySpy.mockReturnValue(okStream())
     await runAgent('hi', { permissionMode: 'plan' })
     const call = querySpy.mock.calls[0]![0] as { options: Record<string, unknown> }
-    expect(call.options['abortController']).toBeInstanceOf(AbortController)
+    const ac = call.options['abortController'] as { signal: AbortSignal }
+    expect(ac?.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('aborts a hanging stream after AGENT_STREAM_TIMEOUT_MS and throws', async () => {
     let capturedSignal: AbortSignal | undefined
-    querySpy.mockImplementation((arg: { options: { abortController?: AbortController } }) => {
+    querySpy.mockImplementation((arg: { options: { abortController?: { signal: AbortSignal } } }) => {
       capturedSignal = arg.options.abortController?.signal
       return hangingStream(capturedSignal)
     })

@@ -28,6 +28,9 @@ export interface RunAgentOptions {
   model?: string
   effort?: string
   chatId?: string
+  onTextDelta?: (delta: string) => void
+  onToolUse?: (toolName: string) => void
+  abortController?: AbortController
 }
 
 // CLAUDE.md is loaded by the SDK itself from settingSources (['project','user']).
@@ -80,8 +83,10 @@ async function runAgentInner(
   const effectiveEffort = isEffortLevel(effort) ? effort : undefined
 
   const typingTimer = onTyping ? setInterval(() => onTyping(), 4000) : null
-  const abortController = new AbortController()
-  const timeoutTimer = setTimeout(() => abortController.abort(), AGENT_STREAM_TIMEOUT_MS)
+  const timeoutController = new AbortController()
+  const timeoutTimer = setTimeout(() => timeoutController.abort(), AGENT_STREAM_TIMEOUT_MS)
+  const externalSignals = opts.abortController ? [opts.abortController.signal] : []
+  const internalAbort = { signal: AbortSignal.any([timeoutController.signal, ...externalSignals]) }
 
   let text: string | null = null
   let newSessionId: string | undefined
@@ -93,7 +98,7 @@ async function runAgentInner(
       permissionMode,
       systemPrompt: buildSystemPrompt(effectiveModel),
       maxTurns: AGENT_MAX_TURNS,
-      abortController,
+      abortController: internalAbort,
     }
     if (sessionId) options['resume'] = sessionId
     if (effectiveModel) options['model'] = effectiveModel
@@ -103,7 +108,18 @@ async function runAgentInner(
 
     for await (const event of stream as AsyncIterable<any>) {
       onStreamStart()
-      if (event?.type === 'system' && event?.subtype === 'init' && event?.session_id) {
+      if (event?.type === 'stream_event') {
+        const delta = event?.event?.delta
+        if (delta?.type === 'text_delta' && typeof delta?.text === 'string' && delta.text) {
+          opts.onTextDelta?.(delta.text)
+        }
+      } else if (event?.type === 'assistant') {
+        for (const block of (event?.message?.content ?? []) as Array<{ type?: string; name?: string }>) {
+          if (block?.type === 'tool_use') {
+            if (block?.name) opts.onToolUse?.(block.name)
+          }
+        }
+      } else if (event?.type === 'system' && event?.subtype === 'init' && event?.session_id) {
         newSessionId = event.session_id
       } else if (event?.type === 'system' && event?.subtype === 'compact_boundary') {
         if (chatId) recordCompaction(chatId)
