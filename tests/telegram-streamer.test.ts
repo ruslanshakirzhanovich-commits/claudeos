@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../src/format.js', () => ({
   formatForTelegram: (t: string) => `<b>formatted:</b> ${t}`,
@@ -68,23 +68,31 @@ describe('TelegramStreamer', () => {
   let sendMessage: ReturnType<typeof vi.fn>
   let editMessageText: ReturnType<typeof vi.fn>
   let sendDocument: ReturnType<typeof vi.fn>
+  let sendChatAction: ReturnType<typeof vi.fn>
   let api: {
     sendMessage: typeof sendMessage
     editMessageText: typeof editMessageText
     sendDocument: typeof sendDocument
+    sendChatAction: typeof sendChatAction
   }
 
   beforeEach(() => {
+    vi.useFakeTimers()
     sendMessage = vi.fn().mockResolvedValue({ message_id: 42 })
     editMessageText = vi.fn().mockResolvedValue({})
     sendDocument = vi.fn().mockResolvedValue({})
-    api = { sendMessage, editMessageText, sendDocument }
+    sendChatAction = vi.fn().mockResolvedValue({})
+    api = { sendMessage, editMessageText, sendDocument, sendChatAction }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('sends placeholder on start', async () => {
     const streamer = new TelegramStreamer()
     await streamer.start(api as any, '123')
-    expect(sendMessage).toHaveBeenCalledWith('123', '⏳', undefined)
+    expect(sendMessage).toHaveBeenCalledWith('123', '·')
   })
 
   it('accumulates text via onText', async () => {
@@ -92,8 +100,8 @@ describe('TelegramStreamer', () => {
     await streamer.start(api as any, '123')
     streamer.onText('Hello ')
     streamer.onText('world')
-    // editNow should show accumulated buffer
-    await (streamer as any).editNow()
+    const draft = (streamer as any).buildDraft() as string
+    await (streamer as any).doEdit(draft)
     expect(editMessageText).toHaveBeenCalledWith('123', 42, 'Hello world', { parse_mode: 'HTML' })
   })
 
@@ -102,7 +110,8 @@ describe('TelegramStreamer', () => {
     await streamer.start(api as any, '123')
     streamer.onText('Thinking')
     streamer.onToolUse()
-    await (streamer as any).editNow()
+    const draft = (streamer as any).buildDraft() as string
+    await (streamer as any).doEdit(draft)
     expect(editMessageText).toHaveBeenCalledWith('123', 42, 'Thinking...', { parse_mode: 'HTML' })
   })
 
@@ -111,7 +120,8 @@ describe('TelegramStreamer', () => {
     await streamer.start(api as any, '123')
     streamer.onToolUse()
     streamer.onText('Result')
-    await (streamer as any).editNow()
+    const draft = (streamer as any).buildDraft() as string
+    await (streamer as any).doEdit(draft)
     const call = editMessageText.mock.calls[0][2] as string
     expect(call).not.toContain('...')
   })
@@ -130,7 +140,7 @@ describe('TelegramStreamer', () => {
     await streamer.start(api as any, '123')
     streamer.onText('Partial text')
     await streamer.finalize(null, true)
-    const callArg = editMessageText.mock.calls[0][2] as string
+    const callArg = editMessageText.mock.calls.at(-1)![2] as string
     expect(callArg).toContain('🛑')
     expect(callArg).toContain('Partial text')
   })
@@ -146,7 +156,8 @@ describe('TelegramStreamer', () => {
     const streamer = new TelegramStreamer()
     await streamer.start(api as any, '123')
     streamer.onText('<script>alert(1)</script>')
-    await (streamer as any).editNow()
+    const draft = (streamer as any).buildDraft() as string
+    await (streamer as any).doEdit(draft)
     const callArg = editMessageText.mock.calls[0][2] as string
     expect(callArg).toContain('&lt;script&gt;')
   })

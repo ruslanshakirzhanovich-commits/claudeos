@@ -2,9 +2,13 @@ import { InputFile, type Api } from 'grammy'
 import { formatForTelegram, splitMessage } from './format.js'
 import { logger } from './logger.js'
 
-const EDIT_INTERVAL_MS = 2000
+const THROTTLE_MS = 2000
+const SPINNER_INTERVAL_MS = 400
+const TYPING_INTERVAL_MS = 4000
 const MAX_DRAFT_LENGTH = 4000
 const CODE_BLOCK_THRESHOLD = 500
+
+const SPINNER_FRAMES = ['·', '··', '···', '··']
 
 const LANG_EXT: Record<string, string> = {
   python: 'py',
@@ -51,38 +55,140 @@ export class TelegramStreamer {
   private inToolUse = false
   private messageId?: number
   private chatIdStr?: string
-  private editTimer?: NodeJS.Timeout
   private api?: Api
   private dead = false
+
+  private spinnerFrame = 0
+  private spinnerTimer?: NodeJS.Timeout
+
+  private lastSentAt = 0
+  private inFlight?: Promise<void>
+  private pendingDraft?: string
+  private scheduleTimer?: NodeJS.Timeout
+
+  private typingTimer?: NodeJS.Timeout
 
   async start(api: Api, chatId: string | number): Promise<void> {
     this.api = api
     this.chatIdStr = String(chatId)
     try {
-      const msg = await api.sendMessage(this.chatIdStr, '⏳', undefined)
+      const msg = await api.sendMessage(this.chatIdStr, SPINNER_FRAMES[0])
       this.messageId = msg.message_id
     } catch (err) {
       logger.warn({ err }, 'streamer: failed to send placeholder')
       return
     }
-    this.editTimer = setInterval(() => void this.editNow(), EDIT_INTERVAL_MS)
+
+    this.spinnerTimer = setInterval(() => void this.tickSpinner(), SPINNER_INTERVAL_MS)
+
+    this.typingTimer = setInterval(() => {
+      void api.sendChatAction(this.chatIdStr!, 'typing').catch(() => {})
+    }, TYPING_INTERVAL_MS)
+  }
+
+  private async tickSpinner(): Promise<void> {
+    if (this.dead || !this.api || !this.messageId || !this.chatIdStr || this.buffer) return
+    this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER_FRAMES.length
+    try {
+      await this.api.editMessageText(
+        this.chatIdStr,
+        this.messageId,
+        SPINNER_FRAMES[this.spinnerFrame],
+      )
+    } catch (err: unknown) {
+      if (!String(err).includes('message is not modified')) {
+        logger.warn({ err }, 'streamer: spinner edit failed')
+      }
+    }
   }
 
   onText(delta: string): void {
+    if (this.spinnerTimer && !this.buffer) {
+      clearInterval(this.spinnerTimer)
+      this.spinnerTimer = undefined
+    }
     this.buffer += delta
     this.inToolUse = false
+    this.queueEdit()
   }
 
   onToolUse(): void {
     this.inToolUse = true
   }
 
+  private buildDraft(): string {
+    let text = this.buffer
+    if (text.length > MAX_DRAFT_LENGTH) text = text.slice(-MAX_DRAFT_LENGTH)
+    return escapeHtml(text) + (this.inToolUse ? '...' : '')
+  }
+
+  private queueEdit(): void {
+    if (this.dead) return
+    this.pendingDraft = this.buildDraft()
+
+    if (this.inFlight || this.scheduleTimer) return
+
+    const wait = THROTTLE_MS - (Date.now() - this.lastSentAt)
+    if (wait <= 0) {
+      void this.flush()
+    } else {
+      this.scheduleTimer = setTimeout(() => void this.flush(), wait)
+    }
+  }
+
+  private async flush(): Promise<void> {
+    if (this.scheduleTimer) {
+      clearTimeout(this.scheduleTimer)
+      this.scheduleTimer = undefined
+    }
+
+    while (!this.dead) {
+      if (this.inFlight) {
+        await this.inFlight
+        continue
+      }
+
+      const draft = this.pendingDraft
+      if (!draft) return
+      this.pendingDraft = undefined
+
+      const p = this.doEdit(draft).finally(() => {
+        if (this.inFlight === p) this.inFlight = undefined
+      })
+      this.inFlight = p
+      await p
+      this.lastSentAt = Date.now()
+      if (!this.pendingDraft) return
+    }
+  }
+
+  private async doEdit(text: string): Promise<void> {
+    if (!this.api || !this.messageId || !this.chatIdStr) return
+    try {
+      await this.api.editMessageText(this.chatIdStr, this.messageId, text, { parse_mode: 'HTML' })
+    } catch (err: unknown) {
+      if (!String(err).includes('message is not modified')) {
+        logger.warn({ err }, 'streamer: edit failed')
+      }
+    }
+  }
+
   async finalize(text: string | null, aborted = false): Promise<void> {
     this.dead = true
-    if (this.editTimer) {
-      clearInterval(this.editTimer)
-      this.editTimer = undefined
+    if (this.spinnerTimer) {
+      clearInterval(this.spinnerTimer)
+      this.spinnerTimer = undefined
     }
+    if (this.typingTimer) {
+      clearInterval(this.typingTimer)
+      this.typingTimer = undefined
+    }
+    if (this.scheduleTimer) {
+      clearTimeout(this.scheduleTimer)
+      this.scheduleTimer = undefined
+    }
+    if (this.inFlight) await this.inFlight.catch(() => {})
+
     if (!this.api || !this.messageId || !this.chatIdStr) return
 
     const effectiveText = text ?? (this.buffer || null)
@@ -127,22 +233,6 @@ export class TelegramStreamer {
         )
       } catch (err) {
         logger.warn({ err, filename: file.filename }, 'streamer: code file send failed')
-      }
-    }
-  }
-
-  async editNow(): Promise<void> {
-    if (this.dead || !this.api || !this.messageId || !this.chatIdStr || !this.buffer) return
-    let display = this.buffer
-    if (display.length > MAX_DRAFT_LENGTH) display = display.slice(-MAX_DRAFT_LENGTH)
-    const draftText = escapeHtml(display) + (this.inToolUse ? '...' : '')
-    try {
-      await this.api.editMessageText(this.chatIdStr, this.messageId, draftText, {
-        parse_mode: 'HTML',
-      })
-    } catch (err: unknown) {
-      if (!String(err).includes('message is not modified')) {
-        logger.warn({ err }, 'streamer: edit failed')
       }
     }
   }
