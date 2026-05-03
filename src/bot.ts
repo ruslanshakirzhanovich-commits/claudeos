@@ -224,7 +224,9 @@ async function handleMessageInner(
     } else {
       log.error({ err }, 'handleMessage failed')
       await streamer.finalize(null)
-      await ctx.reply(`Error: ${(err as Error).message?.slice(0, 500) ?? 'Unknown error'}`).catch(() => {})
+      await ctx
+        .reply(`Error: ${(err as Error).message?.slice(0, 500) ?? 'Unknown error'}`)
+        .catch(() => {})
     }
   } finally {
     activeAgents.delete(chatId)

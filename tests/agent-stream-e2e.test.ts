@@ -228,20 +228,22 @@ describe('runAgent — recorded SDK stream e2e', () => {
   it('aborts early when external AbortController is aborted', async () => {
     const externalCtrl = new AbortController()
     let capturedSignal: AbortSignal | undefined
-    querySpy.mockImplementation((arg: { options?: { abortController?: { signal: AbortSignal } } }) => {
-      capturedSignal = arg?.options?.abortController?.signal
-      return {
-        async *[Symbol.asyncIterator]() {
-          yield { type: 'system', subtype: 'init', session_id: 'sess-ab' }
-          externalCtrl.abort()
-          // Give the event loop a tick so AbortSignal.any() propagates
-          await new Promise((resolve) => setTimeout(resolve, 0))
-          if (capturedSignal?.aborted) {
-            throw Object.assign(new Error('aborted'), { name: 'AbortError' })
-          }
-        },
-      }
-    })
+    querySpy.mockImplementation(
+      (arg: { options?: { abortController?: { signal: AbortSignal } } }) => {
+        capturedSignal = arg?.options?.abortController?.signal
+        return {
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'system', subtype: 'init', session_id: 'sess-ab' }
+            externalCtrl.abort()
+            // Give the event loop a tick so AbortSignal.any() propagates
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            if (capturedSignal?.aborted) {
+              throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+            }
+          },
+        }
+      },
+    )
 
     await expect(
       runAgent('hi', { permissionMode: 'plan', chatId: 'chat-e2e', abortController: externalCtrl }),

@@ -114,7 +114,10 @@ async function runAgentInner(
           opts.onTextDelta?.(delta.text)
         }
       } else if (event?.type === 'assistant') {
-        for (const block of (event?.message?.content ?? []) as Array<{ type?: string; name?: string }>) {
+        for (const block of (event?.message?.content ?? []) as Array<{
+          type?: string
+          name?: string
+        }>) {
           if (block?.type === 'tool_use') {
             if (block?.name) opts.onToolUse?.(block.name)
           }

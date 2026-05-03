@@ -7,10 +7,21 @@ const MAX_DRAFT_LENGTH = 4000
 const CODE_BLOCK_THRESHOLD = 500
 
 const LANG_EXT: Record<string, string> = {
-  python: 'py', javascript: 'js', typescript: 'ts',
-  bash: 'sh', shell: 'sh', json: 'json', yaml: 'yaml',
-  html: 'html', css: 'css', sql: 'sql', go: 'go',
-  rust: 'rs', java: 'java', cpp: 'cpp', c: 'c',
+  python: 'py',
+  javascript: 'js',
+  typescript: 'ts',
+  bash: 'sh',
+  shell: 'sh',
+  json: 'json',
+  yaml: 'yaml',
+  html: 'html',
+  css: 'css',
+  sql: 'sql',
+  go: 'go',
+  rust: 'rs',
+  java: 'java',
+  cpp: 'cpp',
+  c: 'c',
 }
 
 export function escapeHtml(text: string): string {
@@ -22,13 +33,16 @@ export function extractCodeBlocks(
   threshold = CODE_BLOCK_THRESHOLD,
 ): { text: string; files: Array<{ filename: string; content: string }> } {
   const files: Array<{ filename: string; content: string }> = []
-  const result = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang: string | undefined, code: string) => {
-    if (code.length < threshold) return _m
-    const ext = LANG_EXT[(lang ?? '').toLowerCase()] ?? 'txt'
-    const filename = `code_${files.length + 1}.${ext}`
-    files.push({ filename, content: code })
-    return `[код отправлен файлом: ${filename}]`
-  })
+  const result = text.replace(
+    /```(\w+)?\n([\s\S]*?)```/g,
+    (_m, lang: string | undefined, code: string) => {
+      if (code.length < threshold) return _m
+      const ext = LANG_EXT[(lang ?? '').toLowerCase()] ?? 'txt'
+      const filename = `code_${files.length + 1}.${ext}`
+      files.push({ filename, content: code })
+      return `[код отправлен файлом: ${filename}]`
+    },
+  )
   return { text: result, files }
 }
 
@@ -95,7 +109,9 @@ export class TelegramStreamer {
     } catch (err: unknown) {
       if (!String(err).includes('message is not modified')) {
         logger.warn({ err }, 'streamer: final edit failed, sending new')
-        await this.api.sendMessage(this.chatIdStr, chunks[0], { parse_mode: 'HTML' }).catch(() => {})
+        await this.api
+          .sendMessage(this.chatIdStr, chunks[0], { parse_mode: 'HTML' })
+          .catch(() => {})
       }
     }
 

@@ -80,10 +80,12 @@ describe('runAgent SDK guards', () => {
 
   it('aborts a hanging stream after AGENT_STREAM_TIMEOUT_MS and throws', async () => {
     let capturedSignal: AbortSignal | undefined
-    querySpy.mockImplementation((arg: { options: { abortController?: { signal: AbortSignal } } }) => {
-      capturedSignal = arg.options.abortController?.signal
-      return hangingStream(capturedSignal)
-    })
+    querySpy.mockImplementation(
+      (arg: { options: { abortController?: { signal: AbortSignal } } }) => {
+        capturedSignal = arg.options.abortController?.signal
+        return hangingStream(capturedSignal)
+      },
+    )
 
     await expect(runAgent('hi', { permissionMode: 'plan' })).rejects.toThrow()
     expect(capturedSignal?.aborted).toBe(true)

@@ -50,7 +50,11 @@ export class DiscordStreamer {
     const effectiveText = text ?? (this.buffer || null)
     if (!effectiveText?.trim()) {
       const notice = aborted ? '🛑 Остановлено (без текста)' : '✅ Готово (без текста)'
-      try { await this.message.edit(notice) } catch { /* ignore */ }
+      try {
+        await this.message.edit(notice)
+      } catch {
+        /* ignore */
+      }
       return
     }
 
@@ -64,7 +68,11 @@ export class DiscordStreamer {
       logger.warn({ err }, 'discord-streamer: final edit failed')
     }
     for (const chunk of chunks.slice(1)) {
-      try { await this.channel?.send(chunk) } catch { /* ignore */ }
+      try {
+        await this.channel?.send(chunk)
+      } catch {
+        /* ignore */
+      }
     }
   }
 

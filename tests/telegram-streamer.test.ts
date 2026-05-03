@@ -6,7 +6,10 @@ vi.mock('../src/format.js', () => ({
     if (t.length <= limit) return [t]
     const chunks: string[] = []
     let r = t
-    while (r.length > limit) { chunks.push(r.slice(0, limit)); r = r.slice(limit) }
+    while (r.length > limit) {
+      chunks.push(r.slice(0, limit))
+      r = r.slice(limit)
+    }
     if (r) chunks.push(r)
     return chunks
   },
@@ -65,7 +68,11 @@ describe('TelegramStreamer', () => {
   let sendMessage: ReturnType<typeof vi.fn>
   let editMessageText: ReturnType<typeof vi.fn>
   let sendDocument: ReturnType<typeof vi.fn>
-  let api: { sendMessage: typeof sendMessage; editMessageText: typeof editMessageText; sendDocument: typeof sendDocument }
+  let api: {
+    sendMessage: typeof sendMessage
+    editMessageText: typeof editMessageText
+    sendDocument: typeof sendDocument
+  }
 
   beforeEach(() => {
     sendMessage = vi.fn().mockResolvedValue({ message_id: 42 })
@@ -113,7 +120,9 @@ describe('TelegramStreamer', () => {
     const streamer = new TelegramStreamer()
     await streamer.start(api as any, '123')
     await streamer.finalize('Final answer')
-    expect(editMessageText).toHaveBeenCalledWith('123', 42, '<b>formatted:</b> Final answer', { parse_mode: 'HTML' })
+    expect(editMessageText).toHaveBeenCalledWith('123', 42, '<b>formatted:</b> Final answer', {
+      parse_mode: 'HTML',
+    })
   })
 
   it('finalize with aborted=true adds stop prefix', async () => {

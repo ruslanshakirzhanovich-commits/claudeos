@@ -36,7 +36,9 @@ function createClient(): DiscordClient {
         if (!handler) return
         if (!m.content) return
         try {
-          type SendableCh = { send: (t: string) => Promise<{ id: string; edit: (t: string) => Promise<unknown> }> }
+          type SendableCh = {
+            send: (t: string) => Promise<{ id: string; edit: (t: string) => Promise<unknown> }>
+          }
           const fetchSendable = async (channelId: string): Promise<SendableCh | null> => {
             if (!client) return null
             const ch = await client.channels.fetch(channelId)

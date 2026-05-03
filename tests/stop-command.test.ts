@@ -13,7 +13,10 @@ async function simulateStop(
   let reply = ''
   const ctx = {
     chat: { id: chatId },
-    reply: (text: string) => { reply = text; return Promise.resolve() },
+    reply: (text: string) => {
+      reply = text
+      return Promise.resolve()
+    },
   }
   // Import and invoke directly
   const { handleStopCommand } = await import('../src/commands/stop.js')

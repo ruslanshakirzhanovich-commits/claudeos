@@ -8,7 +8,12 @@ import { trackInflight } from '../inflight.js'
 import { sendAllChunksOrMark } from '../chunked-send.js'
 import { isOpenMode, addUserChat } from '../users.js'
 import { DiscordStreamer } from './discord-streamer.js'
-import type { DiscordIncomingMessage, DiscordSendReply, DiscordSendTyping, DiscordStreamingCallbacks } from './types.js'
+import type {
+  DiscordIncomingMessage,
+  DiscordSendReply,
+  DiscordSendTyping,
+  DiscordStreamingCallbacks,
+} from './types.js'
 
 const CHAT_ID_PREFIX = 'discord:'
 const DISCORD_MESSAGE_LIMIT = 2000
@@ -107,7 +112,10 @@ async function handleDiscordMessageInner(
       } else {
         log.error({ err }, 'discord streaming failed')
         await streamer.finalize(null)
-        await streaming.sendNew(msg.channelId, `Error: ${(err as Error).message?.slice(0, 500) ?? 'Unknown error'}`)
+        await streaming.sendNew(
+          msg.channelId,
+          `Error: ${(err as Error).message?.slice(0, 500) ?? 'Unknown error'}`,
+        )
       }
     }
     return
