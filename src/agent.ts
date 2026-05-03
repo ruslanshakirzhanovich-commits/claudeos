@@ -103,6 +103,7 @@ async function runAgentInner(
     if (sessionId) options['resume'] = sessionId
     if (effectiveModel) options['model'] = effectiveModel
     if (effectiveEffort) options['maxThinkingTokens'] = effortToThinkingTokens(effectiveEffort)
+    if (opts.onTextDelta) options['includePartialMessages'] = true
 
     const stream = query({ prompt: message, options: options as any })
 
