@@ -16,6 +16,9 @@ export interface ChatTurnInput {
   wrappedUserMessage: string
   permissionMode: PermissionMode
   log: Logger
+  onTextDelta?: (delta: string) => void
+  onToolUse?: (toolName: string) => void
+  abortController?: AbortController
 }
 
 export type ChatTurnResult =
@@ -46,6 +49,9 @@ export async function runChatPipeline(input: ChatTurnInput): Promise<ChatTurnRes
         model,
         effort,
         chatId: input.chatId,
+        onTextDelta: input.onTextDelta,
+        onToolUse: input.onToolUse,
+        abortController: input.abortController,
       })
       if (newSessionId && newSessionId !== sessionId) setSession(input.chatId, newSessionId)
       if (text) await saveConversationTurn(input.chatId, input.userMessage, text)
