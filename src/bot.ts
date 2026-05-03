@@ -44,6 +44,8 @@ import { wrapUntrusted } from './untrusted.js'
 import { resetUsage } from './usage.js'
 import { rateLimitMessage } from './rate-limit.js'
 import { runChatPipeline } from './chat-pipeline.js'
+import { TelegramStreamer } from './telegram-streamer.js'
+import { registerStop } from './commands/stop.js'
 
 async function sendOneTelegramChunk(ctx: Context, chunk: string): Promise<void> {
   // First try HTML; on a non-transient HTML error (parser issues), fall
@@ -72,6 +74,7 @@ async function sendResponse(ctx: Context, text: string): Promise<void> {
 }
 
 const openModeWarnedChats = new Set<string>()
+const activeAgents = new Map<string, AbortController>()
 function warnOpenModeOnce(
   chatId: string,
   userId: number | undefined,
@@ -138,10 +141,57 @@ async function handleMessageInner(
   log.info({ preview: memoryText.slice(0, 80) }, 'message received')
 
   await ctx.replyWithChatAction('typing').catch(() => {})
-  const sendTyping = nonOverlapping(async () => {
-    await ctx.replyWithChatAction('typing').catch(() => {})
-  })
-  const typingInterval: NodeJS.Timeout = setInterval(sendTyping, TYPING_REFRESH_MS)
+
+  const wantVoice = (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
+
+  // Voice path: skip streaming, keep typing indicator (TTS needs the full text first)
+  if (wantVoice) {
+    const sendTyping = nonOverlapping(async () => {
+      await ctx.replyWithChatAction('typing').catch(() => {})
+    })
+    const typingInterval = setInterval(sendTyping, TYPING_REFRESH_MS)
+    try {
+      const result = await runChatPipeline({
+        chatId,
+        userMessage: memoryText,
+        wrappedUserMessage: agentInput,
+        permissionMode: isAdmin(chatId) ? 'bypassPermissions' : 'plan',
+        log,
+      })
+      if (result.kind === 'rate-limited') {
+        await ctx.reply(rateLimitMessage(result.retryAfterMs)).catch(() => {})
+        return
+      }
+      if (result.kind === 'error') {
+        log.error({ err: result.error }, 'handleMessage failed')
+        await ctx.reply(`Error: ${result.error.message.slice(0, 500)}`).catch(() => {})
+        return
+      }
+      const text = result.text
+      if (text) {
+        try {
+          await ctx.replyWithChatAction('record_voice').catch(() => {})
+          const { audio, truncated } = await synthesizeSpeech(text)
+          await ctx.replyWithVoice(new InputFile(audio, 'voice.ogg'))
+          if (truncated) await sendResponse(ctx, text)
+        } catch (err) {
+          log.warn({ err }, 'TTS failed, falling back to text')
+          await sendResponse(ctx, text)
+        }
+      } else {
+        await ctx.reply('(no output)').catch(() => {})
+      }
+    } finally {
+      clearInterval(typingInterval)
+    }
+    return
+  }
+
+  // Streaming text path
+  const abortController = new AbortController()
+  activeAgents.set(chatId, abortController)
+  const streamer = new TelegramStreamer()
+  await streamer.start(ctx.api, chatId)
 
   try {
     const result = await runChatPipeline({
@@ -150,40 +200,34 @@ async function handleMessageInner(
       wrappedUserMessage: agentInput,
       permissionMode: isAdmin(chatId) ? 'bypassPermissions' : 'plan',
       log,
+      onTextDelta: (d) => streamer.onText(d),
+      onToolUse: () => streamer.onToolUse(),
+      abortController,
     })
 
     if (result.kind === 'rate-limited') {
+      await streamer.finalize(null)
       await ctx.reply(rateLimitMessage(result.retryAfterMs)).catch(() => {})
       return
     }
     if (result.kind === 'error') {
       log.error({ err: result.error }, 'handleMessage failed')
-      const message = result.error.message.slice(0, 500)
-      await ctx.reply(`Error: ${message}`).catch(() => {})
+      await streamer.finalize(null)
+      await ctx.reply(`Error: ${result.error.message.slice(0, 500)}`).catch(() => {})
       return
     }
 
-    const text = result.text
-    const replyText = text ?? '(no output)'
-    const wantVoice = (opts.forceVoice || getTtsEnabled(chatId)) && voiceCapabilities().tts
-
-    if (wantVoice && text) {
-      try {
-        await ctx.replyWithChatAction('record_voice').catch(() => {})
-        const { audio, truncated } = await synthesizeSpeech(text)
-        await ctx.replyWithVoice(new InputFile(audio, 'voice.ogg'))
-        if (truncated) {
-          await sendResponse(ctx, text)
-        }
-      } catch (err) {
-        log.warn({ err }, 'TTS failed, falling back to text')
-        await sendResponse(ctx, replyText)
-      }
+    await streamer.finalize(result.text)
+  } catch (err) {
+    if (abortController.signal.aborted) {
+      await streamer.finalize(null, true)
     } else {
-      await sendResponse(ctx, replyText)
+      log.error({ err }, 'handleMessage failed')
+      await streamer.finalize(null)
+      await ctx.reply(`Error: ${(err as Error).message?.slice(0, 500) ?? 'Unknown error'}`).catch(() => {})
     }
   } finally {
-    clearInterval(typingInterval)
+    activeAgents.delete(chatId)
   }
 }
 
@@ -286,6 +330,7 @@ export function createBot(): Bot {
   registerVoice(bot)
 
   registerVersion(bot)
+  registerStop(bot, activeAgents)
 
   bot.on('message:text', async (ctx) => {
     const text = ctx.message?.text ?? ''
