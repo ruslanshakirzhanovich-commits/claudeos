@@ -36,6 +36,27 @@ function createClient(): DiscordClient {
         if (!handler) return
         if (!m.content) return
         try {
+          type SendableCh = { send: (t: string) => Promise<{ id: string; edit: (t: string) => Promise<unknown> }> }
+          const fetchSendable = async (channelId: string): Promise<SendableCh | null> => {
+            if (!client) return null
+            const ch = await client.channels.fetch(channelId)
+            if (ch && 'send' in ch && typeof (ch as SendableCh).send === 'function') {
+              return ch as SendableCh
+            }
+            return null
+          }
+          const streaming: import('./types.js').DiscordStreamingCallbacks = {
+            sendReturning: async (channelId, text) => {
+              const ch = await fetchSendable(channelId)
+              if (!ch) return { id: '', edit: async () => {} }
+              const m = await ch.send(text)
+              return { id: m.id, edit: (newText: string) => m.edit(newText).then(() => {}) }
+            },
+            sendNew: async (channelId, text) => {
+              const ch = await fetchSendable(channelId)
+              if (ch) await ch.send(text)
+            },
+          }
           await handler(
             {
               userId: m.author.id,
@@ -63,6 +84,7 @@ function createClient(): DiscordClient {
                 await (ch as { sendTyping: () => Promise<unknown> }).sendTyping()
               }
             },
+            streaming,
           )
         } catch (err) {
           logger.error({ err }, 'discord handler crashed')

@@ -14,10 +14,21 @@ export type DiscordSendReply = (channelId: string, text: string) => Promise<void
 // boundary so callers that don't care about typing indicators still work.
 export type DiscordSendTyping = (channelId: string) => Promise<void>
 
+export type DiscordSendReturning = (
+  channelId: string,
+  text: string,
+) => Promise<{ id: string; edit: (newText: string) => Promise<void> }>
+
+export interface DiscordStreamingCallbacks {
+  sendReturning: DiscordSendReturning
+  sendNew: (channelId: string, text: string) => Promise<void>
+}
+
 export type DiscordMessageHandler = (
   msg: DiscordIncomingMessage,
   send: DiscordSendReply,
   sendTyping?: DiscordSendTyping,
+  streaming?: DiscordStreamingCallbacks,
 ) => Promise<void>
 
 export interface DiscordClient {
